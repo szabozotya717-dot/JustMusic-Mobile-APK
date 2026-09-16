@@ -49,10 +49,98 @@ def fmt_time(seconds):
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
+def _clean_title_text(text):
+    """PC-s JustMusic!-hoz hasonló automatikus cím-takarítás."""
+    text = str(text or "").strip()
+
+    # yt-dlp / egyes letöltők gyakran " _ extra" részt raknak a végére.
+    if " _ " in text:
+        text = text.split(" _ ", 1)[0].strip()
+
+    text = re.sub(r"[_]+", " ", text)
+
+    # YouTube / letöltő oldalak tipikus zárójeles toldalékai.
+    junk_patterns = [
+        r"\s*[\(\[]\s*(?:official\s*)?(?:music\s*)?(?:video|audio|lyrics?)\s*[\)\]]",
+        r"\s*[\(\[]\s*(?:video|audio|lyrics?)\s*(?:official)?\s*[\)\]]",
+        r"\s*[\(\[]\s*(?:hd|full\s*hd|4k|8k|visuali[sz]er|clean|explicit)\s*[\)\]]",
+        r"\s*[\(\[]\s*\d{2,4}\s*kbps\s*[\)\]]",
+        r"\s*[\(\[]\s*M\s*[\)\]]",
+    ]
+
+    previous = None
+    while previous != text:
+        previous = text
+        for pattern in junk_patterns:
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+
+    # Végi szöveges toldalékok.
+    text = re.sub(
+        r"\s*[-–—|]\s*(?:official\s*)?(?:music\s*)?(?:video|audio|lyrics?)\s*$",
+        "",
+        text,
+        flags=re.IGNORECASE
+    ).strip()
+
+    text = re.sub(
+        r"\s*[-–—_]*\s*\d{2,4}\s*kbps\s*$",
+        "",
+        text,
+        flags=re.IGNORECASE
+    ).strip()
+
+    # yt-dlp / YouTube ID: tipikusan 11 karakter a fájlnév végén.
+    # Pl. "Miyagi - Патрон (Official Audio) (M) Oh0Sjg8VLIQ"
+    text = re.sub(
+        r"(?:\s+|\s*[-–—_]\s*)[A-Za-z0-9_-]{11}\s*$",
+        "",
+        text
+    ).strip()
+
+    # Csak TÉNYLEG hibás, pár nélküli szélső zárójeleket szedünk le.
+    # Így pl. a "(feat. Valaki)" érintetlen marad.
+    for opening, closing in (("[", "]"), ("(", ")"), ("{", "}")):
+        if text.startswith(opening) and text.count(opening) > text.count(closing):
+            text = text[1:].strip()
+        if text.endswith(closing) and text.count(closing) > text.count(opening):
+            text = text[:-1].strip()
+
+    text = text.strip(" \t\r\n-_–—|:;,.!~")
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
+
+def _metadata_artist_title(path):
+    if MutagenFile is None:
+        return "", ""
+
+    try:
+        audio = MutagenFile(path, easy=True)
+        tags = getattr(audio, "tags", None) or {}
+
+        def first(key):
+            value = tags.get(key)
+            if isinstance(value, (list, tuple)):
+                value = value[0] if value else ""
+            return str(value or "").strip()
+
+        artist = _clean_title_text(first("artist"))
+        title = _clean_title_text(first("title"))
+        return artist, title
+    except Exception:
+        return "", ""
+
+
 def clean_title(path):
-    name = Path(path).stem
-    name = re.sub(r"[_]+", " ", name)
-    name = re.sub(r"\s+", " ", name).strip()
+    """A könyvtárban mindig tiszta, emberi címet mutat."""
+    artist, title = _metadata_artist_title(path)
+
+    if title:
+        if artist and artist.casefold() not in title.casefold():
+            return f"{artist} - {title}"
+        return title
+
+    name = _clean_title_text(Path(path).stem)
     return name or "Ismeretlen szám"
 
 
@@ -329,14 +417,16 @@ class PlayerBar(GlassPanel):
         self.buttons["SHUF"].bind(on_release=lambda *_: App.get_running_app().toggle_shuffle())
         self.buttons["PREV"].bind(on_release=lambda *_: App.get_running_app().previous())
         self.buttons["PLAY"].bind(on_release=lambda *_: App.get_running_app().toggle_play())
-        self.buttons["NEXT"].bind(on_release=lambda *_: App.get_running_app().next())
+        self.buttons["NEXT"].bind(on_release=lambda *_: App.get_running_app().next_pressed())
         self.buttons["REP"].bind(on_release=lambda *_: App.get_running_app().cycle_repeat())
         self.add_widget(controls)
 
         features = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4))
+        self.feature_buttons = {}
         for text, target in (("MIX", "mix"), ("EQ", "eq"), ("RG", "rg"), ("QUEUE", "queue"), ("SLEEP", "sleep")):
             b = Button(text=text, background_normal="", background_color=(.03, .10, .17, .96), color=ACCENT_2, bold=True, font_size="10sp")
             b.bind(on_release=lambda _, n=target: App.get_running_app().open_screen(n))
+            self.feature_buttons[target] = b
             features.add_widget(b)
         self.add_widget(features)
 
@@ -345,6 +435,15 @@ class PlayerBar(GlassPanel):
     def set_repeat(self, mode):
         self.buttons["REP"].text = {"off":"REP", "all":"REP ALL", "one":"REP 1"}[mode]
         self.buttons["REP"].color = ACCENT_2 if mode != "off" else TEXT
+    def set_mix_status(self, crossfade, gapless, fade_out, fade_in):
+        b = self.feature_buttons.get("mix")
+        if not b: return
+        if gapless:
+            b.text = "MIX GAP"; b.color = ACCENT_2
+        elif crossfade:
+            b.text = f"MIX {fade_out:.1f}/{fade_in:.1f}"; b.color = ACCENT_2
+        else:
+            b.text = "MIX"; b.color = TEXT_2
 
 
 class LibraryScreen(Screen):
@@ -399,13 +498,266 @@ class BaseFeature(Screen):
 
 
 class MixScreen(BaseFeature):
-    def __init__(self,**kwargs):
-        super().__init__(**kwargs); r=self.make("MIX GAP / CROSSFADE"); self.value=Label(text="5.0 mp",color=ACCENT_2,font_size="28sp",size_hint_y=None,height=dp(60)); r.add_widget(self.value)
-        self.slider=Slider(min=0,max=12,step=.5,value=5); self.slider.bind(value=self.changed); r.add_widget(self.slider)
-        r.add_widget(Label(text="0 mp = ki • 3–7 mp = természetes • 8–12 mp = erősebb átmenet",color=TEXT_2,halign="center"))
-    def on_pre_enter(self,*_): self.slider.value=App.get_running_app().mix_seconds
-    def changed(self,_,v):
-        a=App.get_running_app(); a.mix_seconds=float(v); self.value.text=f"{v:.1f} mp"; a.save_settings()
+    """A PC-s Advanced Mixer mobilos, funkcióazonos változata."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("ADVANCED MIXER")
+
+        scroll = ScrollView(do_scroll_x=False)
+        body = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(10),
+            padding=[0, dp(4), 0, dp(18)]
+        )
+        body.bind(minimum_height=body.setter("height"))
+        scroll.add_widget(body)
+        root.add_widget(scroll)
+
+        subtitle = Label(
+            text=(
+                "Fade Out / Fade In külön • Auto / kézi Next külön • "
+                "Gapless • DJ Mode • Mix presetek"
+            ),
+            color=MUTED,
+            font_size="11sp",
+            size_hint_y=None,
+            height=dp(52),
+            halign="center",
+            valign="middle"
+        )
+        subtitle.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        body.add_widget(subtitle)
+
+        self.status = Label(
+            text="",
+            color=ACCENT_2,
+            font_size="14sp",
+            bold=True,
+            size_hint_y=None,
+            height=dp(55),
+            halign="center",
+            valign="middle"
+        )
+        self.status.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        body.add_widget(self.status)
+
+        self.mode = Label(
+            text="",
+            color=TEXT_2,
+            font_size="11sp",
+            size_hint_y=None,
+            height=dp(38),
+            halign="center",
+            valign="middle"
+        )
+        self.mode.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        body.add_widget(self.mode)
+
+        # --- FŐ KAPCSOLÓK ---
+        toggles = GlassPanel(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(160),
+            padding=dp(8),
+            spacing=dp(7)
+        )
+        row1 = BoxLayout(spacing=dp(6))
+        row2 = BoxLayout(spacing=dp(6))
+        toggles.add_widget(row1)
+        toggles.add_widget(row2)
+        body.add_widget(toggles)
+
+        self.crossfade_btn = self._button("CROSSFADE BE / KI", primary=True)
+        self.auto_btn = self._button("AUTO VÁLTÁS")
+        self.manual_btn = self._button("KÉZI NEXT MIX")
+        row1.add_widget(self.crossfade_btn)
+        row1.add_widget(self.auto_btn)
+        row1.add_widget(self.manual_btn)
+
+        self.gapless_btn = self._button("GAPLESS")
+        self.dj_btn = self._button("DJ MODE")
+        self.nextmix_btn = self._button("NEXT MIX MOST")
+        row2.add_widget(self.gapless_btn)
+        row2.add_widget(self.dj_btn)
+        row2.add_widget(self.nextmix_btn)
+
+        self.crossfade_btn.bind(on_release=lambda *_: self.toggle_crossfade())
+        self.auto_btn.bind(on_release=lambda *_: self.toggle_auto())
+        self.manual_btn.bind(on_release=lambda *_: self.toggle_manual())
+        self.gapless_btn.bind(on_release=lambda *_: self.toggle_gapless())
+        self.dj_btn.bind(on_release=lambda *_: self.toggle_dj())
+        self.nextmix_btn.bind(on_release=lambda *_: App.get_running_app().start_next_transition(auto=False, force=True))
+
+        # --- FADE OUT / FADE IN KÜLÖN ---
+        fade_box = GlassPanel(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(230),
+            padding=[dp(12), dp(10)],
+            spacing=dp(5)
+        )
+        body.add_widget(fade_box)
+
+        self.out_value = Label(text="1.5 mp", color=ACCENT_2, bold=True, size_hint_y=None, height=dp(30))
+        fade_box.add_widget(Label(text="FADE OUT", color=TEXT, bold=True, size_hint_y=None, height=dp(28)))
+        fade_box.add_widget(self.out_value)
+        self.out_slider = Slider(min=0, max=10, step=.25, value=1.5, size_hint_y=None, height=dp(44))
+        self.out_slider.bind(value=self._fade_out_changed)
+        fade_box.add_widget(self.out_slider)
+
+        self.in_value = Label(text="1.5 mp", color=ACCENT_2, bold=True, size_hint_y=None, height=dp(30))
+        fade_box.add_widget(Label(text="FADE IN", color=TEXT, bold=True, size_hint_y=None, height=dp(28)))
+        fade_box.add_widget(self.in_value)
+        self.in_slider = Slider(min=0, max=10, step=.25, value=1.5, size_hint_y=None, height=dp(44))
+        self.in_slider.bind(value=self._fade_in_changed)
+        fade_box.add_widget(self.in_slider)
+
+        self.total_value = Label(text="3.0 mp összesen", color=MUTED, size_hint_y=None, height=dp(26))
+        fade_box.add_widget(self.total_value)
+
+        # --- PC-S PRESETEK, ugyanazokkal az értékekkel ---
+        body.add_widget(Label(text="MIX PRESETEK", color=MUTED, bold=True, size_hint_y=None, height=dp(30)))
+        preset_box = BoxLayout(size_hint_y=None, height=dp(98), spacing=dp(5))
+        left = BoxLayout(orientation="vertical", spacing=dp(5))
+        right = BoxLayout(orientation="vertical", spacing=dp(5))
+        preset_box.add_widget(left)
+        preset_box.add_widget(right)
+        body.add_widget(preset_box)
+
+        for parent, text, name in (
+            (left, "QUICK", "quick"),
+            (left, "RADIO", "radio"),
+            (left, "DJ", "dj"),
+            (right, "SMOOTH", "smooth"),
+            (right, "CINEMATIC", "cinematic"),
+            (right, "GAPLESS", "gapless"),
+        ):
+            btn = self._button(text)
+            btn.bind(on_release=lambda _, n=name: self.apply_preset(n))
+            parent.add_widget(btn)
+
+        # --- MANUÁLIS MIX ESZKÖZÖK ---
+        body.add_widget(Label(text="MANUÁLIS MIX ESZKÖZÖK", color=MUTED, bold=True, size_hint_y=None, height=dp(30)))
+        tools = BoxLayout(size_hint_y=None, height=dp(55), spacing=dp(6))
+        fade_now = self._button("FADE OUT MOST")
+        restart = self._button("ÚJRAINDÍTÁS FADE IN-NEL")
+        fade_now.bind(on_release=lambda *_: App.get_running_app().fade_out_current())
+        restart.bind(on_release=lambda *_: App.get_running_app().restart_current_with_fade())
+        tools.add_widget(fade_now)
+        tools.add_widget(restart)
+        body.add_widget(tools)
+
+    def _button(self, text, primary=False):
+        return Button(
+            text=text,
+            background_normal="",
+            background_color=ACCENT if primary else PANEL_2,
+            color=(0, .07, .12, 1) if primary else TEXT,
+            bold=True,
+            font_size="10sp"
+        )
+
+    def on_pre_enter(self, *_):
+        app = App.get_running_app()
+        self.out_slider.value = app.mix_fade_out_seconds
+        self.in_slider.value = app.mix_fade_in_seconds
+        self.refresh()
+
+    def refresh(self):
+        app = App.get_running_app()
+
+        if app.mix_gapless_enabled:
+            self.status.text = "GAPLESS • azonnali dalváltás"
+            self.status.color = ACCENT_2
+        elif app.crossfade_enabled:
+            self.status.text = (
+                f"MIX: BE • Fade Out {app.mix_fade_out_seconds:.1f}s • "
+                f"Fade In {app.mix_fade_in_seconds:.1f}s"
+            )
+            self.status.color = ACCENT_2
+        else:
+            self.status.text = "MIX: KI"
+            self.status.color = MUTED
+
+        parts = [
+            "AUTO: BE" if app.mix_auto_transition_enabled else "AUTO: KI",
+            "KÉZI NEXT: BE" if app.mix_manual_transition_enabled else "KÉZI NEXT: KI",
+        ]
+        if app.mix_dj_mode_enabled:
+            parts.append("DJ MODE")
+        self.mode.text = "   •   ".join(parts)
+
+        self.out_value.text = f"{app.mix_fade_out_seconds:.1f} mp"
+        self.in_value.text = f"{app.mix_fade_in_seconds:.1f} mp"
+        self.total_value.text = f"{app.mix_fade_out_seconds + app.mix_fade_in_seconds:.1f} mp összesen"
+
+        self.auto_btn.color = ACCENT_2 if app.mix_auto_transition_enabled else TEXT_2
+        self.manual_btn.color = ACCENT_2 if app.mix_manual_transition_enabled else TEXT_2
+        self.gapless_btn.color = ACCENT_2 if app.mix_gapless_enabled else TEXT_2
+        self.dj_btn.color = ACCENT_2 if app.mix_dj_mode_enabled else TEXT_2
+        self.crossfade_btn.background_color = ACCENT if app.crossfade_enabled else PANEL_2
+        self.crossfade_btn.color = (0, .07, .12, 1) if app.crossfade_enabled else TEXT
+
+        try:
+            app.library.player.set_mix_status(
+                app.crossfade_enabled, app.mix_gapless_enabled,
+                app.mix_fade_out_seconds, app.mix_fade_in_seconds
+            )
+        except Exception:
+            pass
+
+    def _fade_out_changed(self, _, value):
+        app = App.get_running_app()
+        app.mix_fade_out_seconds = max(0.0, min(10.0, float(value)))
+        app.save_settings()
+        self.refresh()
+
+    def _fade_in_changed(self, _, value):
+        app = App.get_running_app()
+        app.mix_fade_in_seconds = max(0.0, min(10.0, float(value)))
+        app.save_settings()
+        self.refresh()
+
+    def toggle_crossfade(self):
+        app = App.get_running_app()
+        app.crossfade_enabled = not app.crossfade_enabled
+        if app.crossfade_enabled:
+            app.mix_gapless_enabled = False
+        app.save_settings()
+        self.refresh()
+
+    def toggle_auto(self):
+        app = App.get_running_app()
+        app.mix_auto_transition_enabled = not app.mix_auto_transition_enabled
+        app.save_settings()
+        self.refresh()
+
+    def toggle_manual(self):
+        app = App.get_running_app()
+        app.mix_manual_transition_enabled = not app.mix_manual_transition_enabled
+        app.save_settings()
+        self.refresh()
+
+    def toggle_gapless(self):
+        app = App.get_running_app()
+        app.mix_gapless_enabled = not app.mix_gapless_enabled
+        if app.mix_gapless_enabled:
+            app.crossfade_enabled = False
+        app.save_settings()
+        self.refresh()
+
+    def toggle_dj(self):
+        app = App.get_running_app()
+        app.set_dj_mode(not app.mix_dj_mode_enabled)
+        self.refresh()
+
+    def apply_preset(self, name):
+        App.get_running_app().apply_mix_preset(name)
+        self.out_slider.value = App.get_running_app().mix_fade_out_seconds
+        self.in_slider.value = App.get_running_app().mix_fade_in_seconds
+        self.refresh()
 
 
 class EQScreen(BaseFeature):
@@ -459,28 +811,66 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.1"
+        self.title="JustMusic! Mobile v1.2"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1
         self.audio=NativeAudio(); self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
-        self.shuffle_enabled=False; self.repeat_mode="off"; self.mix_seconds=5.0; self.mix_in_progress=False; self.mix_target_index=None
+        self.shuffle_enabled=False; self.repeat_mode="off"
+        # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
+        self.crossfade_enabled=False
+        self.mix_fade_out_seconds=1.5
+        self.mix_fade_in_seconds=1.5
+        self.mix_auto_transition_enabled=True
+        self.mix_manual_transition_enabled=True
+        self.mix_gapless_enabled=False
+        self.mix_dj_mode_enabled=False
+        self.mix_in_progress=False
+        self.mix_target_index=None
+        self.mix_started_at=None
+        self.mix_target_rg_db=0.0
         self.eq_values=[0,0,0,0,0]; self.replaygain_enabled=True; self.user_volume=.92; self.current_rg_db=0.0; self.sleep_deadline=None; self.paused_position=0.0
         self.load_settings()
         self.manager=ScreenManager(); self.library=LibraryScreen(name="library"); self.lyrics_screen=LyricsScreen(name="lyrics")
         for s in (self.library,self.lyrics_screen,MixScreen(name="mix"),EQScreen(name="eq"),RGScreen(name="rg"),QueueScreen(name="queue"),SleepScreen(name="sleep")): self.manager.add_widget(s)
         self.library.player.set_shuffle(self.shuffle_enabled); self.library.player.set_repeat(self.repeat_mode)
+        self.library.player.set_mix_status(self.crossfade_enabled,self.mix_gapless_enabled,self.mix_fade_out_seconds,self.mix_fade_in_seconds)
         Clock.schedule_interval(self.tick,.10); Clock.schedule_once(lambda *_:self.permissions(),.4); Clock.schedule_once(lambda *_:self.scan(),1.2)
         return self.manager
 
     def settings_path(self): return Path("/storage/emulated/0/Music")/SETTINGS_NAME if platform=="android" else Path.home()/SETTINGS_NAME
     def load_settings(self):
         try:
-            d=json.loads(self.settings_path().read_text(encoding="utf-8")); self.shuffle_enabled=bool(d.get("shuffle",False)); self.repeat_mode=d.get("repeat","off"); self.mix_seconds=float(d.get("mix",5)); self.eq_values=list(d.get("eq",[0,0,0,0,0]))[:5]; self.replaygain_enabled=bool(d.get("rg",True))
+            d=json.loads(self.settings_path().read_text(encoding="utf-8")); self.shuffle_enabled=bool(d.get("shuffle",False)); self.repeat_mode=d.get("repeat","off")
+            mix=d.get("mixer",{})
+            self.crossfade_enabled=bool(mix.get("crossfade_enabled", d.get("mix", 0) not in (0, None)))
+            legacy=float(d.get("mix",3.0) or 3.0)
+            self.mix_fade_out_seconds=float(mix.get("fade_out", legacy/2.0))
+            self.mix_fade_in_seconds=float(mix.get("fade_in", legacy/2.0))
+            self.mix_auto_transition_enabled=bool(mix.get("auto",True))
+            self.mix_manual_transition_enabled=bool(mix.get("manual",True))
+            self.mix_gapless_enabled=bool(mix.get("gapless",False))
+            self.mix_dj_mode_enabled=bool(mix.get("dj",False))
+            if self.mix_gapless_enabled:self.crossfade_enabled=False
+            self.eq_values=list(d.get("eq",[0,0,0,0,0]))[:5]; self.replaygain_enabled=bool(d.get("rg",True))
             while len(self.eq_values)<5:self.eq_values.append(0)
         except Exception: pass
     def save_settings(self):
         try:
-            p=self.settings_path(); p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps({"shuffle":self.shuffle_enabled,"repeat":self.repeat_mode,"mix":self.mix_seconds,"eq":self.eq_values,"rg":self.replaygain_enabled},ensure_ascii=False),encoding="utf-8")
+            p=self.settings_path(); p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps({
+                "shuffle":self.shuffle_enabled,
+                "repeat":self.repeat_mode,
+                "mixer":{
+                    "crossfade_enabled":self.crossfade_enabled,
+                    "fade_out":self.mix_fade_out_seconds,
+                    "fade_in":self.mix_fade_in_seconds,
+                    "auto":self.mix_auto_transition_enabled,
+                    "manual":self.mix_manual_transition_enabled,
+                    "gapless":self.mix_gapless_enabled,
+                    "dj":self.mix_dj_mode_enabled,
+                },
+                "eq":self.eq_values,
+                "rg":self.replaygain_enabled
+            },ensure_ascii=False),encoding="utf-8")
         except Exception: pass
     def permissions(self):
         if platform!="android":return
@@ -520,7 +910,7 @@ class JustMusicApp(App):
         except ValueError:pass
     def play_index(self,i):
         if not(0<=i<len(self.songs)):return
-        p=self.songs[i]; self.mix_in_progress=False;self.mix_target_index=None
+        p=self.songs[i]; self.mix_in_progress=False;self.mix_target_index=None;self.mix_started_at=None
         try:ok=self.audio.load(p)
         except Exception as e:self.library.status.text=f"Lejátszási hiba: {e}";return
         if not ok:self.library.status.text="Ezt a fájlt nem sikerült megnyitni.";return
@@ -549,21 +939,187 @@ class JustMusicApp(App):
     def show_library(self):self.manager.current="library"
     def open_lyrics(self):self.refresh_lyrics(True);self.manager.current="lyrics"
     def open_screen(self,n):self.manager.current=n
-    def start_crossfade(self):
-        if not self.audio.android or self.mix_seconds<=0 or self.mix_in_progress:return
-        target=self.next_index()
-        if target<0:return
+    def _base_volume_for_gain(self, gain_db):
+        gain = gain_db if self.replaygain_enabled else 0.0
+        return max(0.0, min(1.0, self.user_volume * (10 ** (gain / 20.0))))
+
+    def _refresh_mix_screen(self):
         try:
-            if self.audio.prepare_next(self.songs[target]):self.audio.volume(1,0);self.audio.start_next();self.mix_in_progress=True;self.mix_target_index=target
-        except Exception as e:print("Crossfade:",e);self.mix_in_progress=False
-    def update_crossfade(self,remaining):
-        if not self.mix_in_progress:return
-        ratio=max(0,min(1,1-remaining/max(.1,self.mix_seconds)));base=max(0,min(1,self.user_volume*(10**((self.current_rg_db if self.replaygain_enabled else 0)/20))))
-        self.audio.volume(base*(1-ratio),self.user_volume*ratio)
-        if ratio>=.995 or remaining<=.08:
+            screen = self.manager.get_screen("mix")
+            screen.refresh()
+        except Exception:
+            pass
+
+    def set_dj_mode(self, enabled):
+        self.mix_dj_mode_enabled = bool(enabled)
+        if self.mix_dj_mode_enabled:
+            self.repeat_mode = "all"
+            self.shuffle_enabled = True
+            self.crossfade_enabled = True
+            self.mix_gapless_enabled = False
+            self.mix_fade_out_seconds = 2.0
+            self.mix_fade_in_seconds = 2.5
+            self.library.player.set_shuffle(True)
+            self.library.player.set_repeat("all")
+        self.save_settings()
+        self._refresh_mix_screen()
+
+    def apply_mix_preset(self, name):
+        preset = str(name).lower()
+        self.mix_dj_mode_enabled = False
+
+        if preset == "quick":
+            self.mix_gapless_enabled=False; self.crossfade_enabled=True
+            self.mix_auto_transition_enabled=True; self.mix_manual_transition_enabled=True
+            self.mix_fade_out_seconds=.5; self.mix_fade_in_seconds=.8
+        elif preset == "smooth":
+            self.mix_gapless_enabled=False; self.crossfade_enabled=True
+            self.mix_auto_transition_enabled=True; self.mix_manual_transition_enabled=True
+            self.mix_fade_out_seconds=2.0; self.mix_fade_in_seconds=2.5
+        elif preset == "radio":
+            self.mix_gapless_enabled=False; self.crossfade_enabled=True
+            self.mix_auto_transition_enabled=True; self.mix_manual_transition_enabled=True
+            self.mix_fade_out_seconds=1.0; self.mix_fade_in_seconds=1.2
+        elif preset == "cinematic":
+            self.mix_gapless_enabled=False; self.crossfade_enabled=True
+            self.mix_auto_transition_enabled=True; self.mix_manual_transition_enabled=True
+            self.mix_fade_out_seconds=4.0; self.mix_fade_in_seconds=4.0
+        elif preset == "gapless":
+            self.mix_gapless_enabled=True; self.crossfade_enabled=False
+            self.mix_auto_transition_enabled=False; self.mix_manual_transition_enabled=False
+            self.mix_fade_out_seconds=0.0; self.mix_fade_in_seconds=0.0
+        elif preset == "dj":
+            self.mix_gapless_enabled=False; self.crossfade_enabled=True
+            self.mix_auto_transition_enabled=True; self.mix_manual_transition_enabled=True
+            self.mix_dj_mode_enabled=True
+            self.mix_fade_out_seconds=2.0; self.mix_fade_in_seconds=2.5
+            self.repeat_mode="all"; self.shuffle_enabled=True
+            self.library.player.set_repeat("all"); self.library.player.set_shuffle(True)
+
+        self.save_settings()
+        self._refresh_mix_screen()
+
+    def next_pressed(self):
+        if self.mix_manual_transition_enabled and (self.crossfade_enabled or self.mix_gapless_enabled):
+            self.start_next_transition(auto=False, force=True)
+        else:
+            self.next()
+
+    def start_next_transition(self, auto=False, force=False):
+        if self.mix_in_progress or not self.songs:
+            return
+
+        if auto and not self.mix_auto_transition_enabled and not force:
+            self.next()
+            return
+
+        if (not auto) and not self.mix_manual_transition_enabled and not force:
+            self.next()
+            return
+
+        target = self.next_index()
+        if target < 0:
+            return
+
+        # GAPLESS = PC-hez hasonlóan fade nélküli azonnali váltás.
+        if self.mix_gapless_enabled:
+            self.play_index(target)
+            return
+
+        if not self.crossfade_enabled or not self.audio.android:
+            self.next()
+            return
+
+        try:
+            if not self.audio.prepare_next(self.songs[target]):
+                self.next()
+                return
+
+            self.mix_target_index = target
+            self.mix_target_rg_db = replaygain_db(self.songs[target])
+            self.mix_started_at = time.time()
+            self.mix_in_progress = True
+
+            current_base = self._base_volume_for_gain(self.current_rg_db)
+            self.audio.volume(current_base, 0.0)
+            self.audio.start_next()
+
+        except Exception as error:
+            print("MIX TRANSITION HIBA:", error)
+            self.mix_in_progress=False
+            self.mix_target_index=None
+            self.mix_started_at=None
+            self.next()
+
+    def update_crossfade(self):
+        if not self.mix_in_progress or self.mix_started_at is None:
+            return
+
+        elapsed = max(0.0, time.time() - self.mix_started_at)
+        out_s = max(0.0, float(self.mix_fade_out_seconds))
+        in_s = max(0.0, float(self.mix_fade_in_seconds))
+
+        out_ratio = 1.0 if out_s <= 0 else min(1.0, elapsed / out_s)
+        in_ratio = 1.0 if in_s <= 0 else min(1.0, elapsed / in_s)
+
+        current_base = self._base_volume_for_gain(self.current_rg_db)
+        next_base = self._base_volume_for_gain(self.mix_target_rg_db)
+
+        self.audio.volume(
+            current_base * (1.0 - out_ratio),
+            next_base * in_ratio
+        )
+
+        if elapsed >= max(out_s, in_s, 0.05):
             if self.audio.swap_to_next():
-                self.current_index=self.mix_target_index;self.current_path=self.songs[self.current_index];self.lyrics=parse_lrc(self.current_path);self.lyric_index=-1;self.current_rg_db=replaygain_db(self.current_path);self.audio.apply_eq(self.eq_values);self.apply_volume();t=clean_title(self.current_path);self.library.player.title.text=f"[b]{t}[/b]";self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{t}"
-            self.mix_in_progress=False;self.mix_target_index=None
+                self.current_index=self.mix_target_index
+                self.current_path=self.songs[self.current_index]
+                self.lyrics=parse_lrc(self.current_path)
+                self.lyric_index=-1
+                self.current_rg_db=self.mix_target_rg_db
+                self.audio.apply_eq(self.eq_values)
+                self.apply_volume()
+                title=clean_title(self.current_path)
+                self.library.player.title.text=f"[b]{title}[/b]"
+                self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
+
+            self.mix_in_progress=False
+            self.mix_target_index=None
+            self.mix_started_at=None
+
+    def fade_out_current(self):
+        if self.current_path is None:
+            return
+        duration = self.mix_fade_out_seconds if self.mix_fade_out_seconds > 0 else 1.0
+        start = time.time()
+        base = self._base_volume_for_gain(self.current_rg_db)
+
+        def step(_dt):
+            ratio = min(1.0, (time.time() - start) / max(.05, duration))
+            self.audio.volume(base * (1.0 - ratio))
+            if ratio >= 1.0:
+                return False
+            return True
+        Clock.schedule_interval(step, .05)
+
+    def restart_current_with_fade(self):
+        if self.current_path is None:
+            return
+        duration = self.mix_fade_in_seconds if self.mix_fade_in_seconds > 0 else 1.0
+        self.audio.seek(0)
+        self.audio.start()
+        self.audio.volume(0.0)
+        start = time.time()
+        base = self._base_volume_for_gain(self.current_rg_db)
+
+        def step(_dt):
+            ratio = min(1.0, (time.time() - start) / max(.05, duration))
+            self.audio.volume(base * ratio)
+            if ratio >= 1.0:
+                return False
+            return True
+        Clock.schedule_interval(step, .05)
+
     def tick(self,_):
         if self.sleep_deadline and time.time()>=self.sleep_deadline:self.sleep_deadline=None;self.audio.pause();self.library.player.set_playing(False)
         if self.current_path is None:return
@@ -572,9 +1128,23 @@ class JustMusicApp(App):
         self.lyrics_screen.time.text=f"{fmt_time(pos)} / {fmt_time(length)}";self.refresh_lyrics()
         if self.audio.is_playing() and length>0:
             rem=max(0,length-pos)
-            if self.audio.android and self.mix_seconds>0 and rem<=self.mix_seconds and not self.mix_in_progress:self.start_crossfade()
-            if self.mix_in_progress:self.update_crossfade(rem)
-            elif rem<=.20:self.next()
+            trigger=max(self.mix_fade_out_seconds,self.mix_fade_in_seconds)
+            if (
+                self.audio.android
+                and self.crossfade_enabled
+                and self.mix_auto_transition_enabled
+                and trigger>0
+                and rem<=trigger
+                and not self.mix_in_progress
+            ):
+                self.start_next_transition(auto=True)
+            if self.mix_in_progress:
+                self.update_crossfade()
+            elif rem<=.20:
+                if self.mix_gapless_enabled and self.mix_auto_transition_enabled:
+                    self.start_next_transition(auto=True)
+                else:
+                    self.next()
     def refresh_lyrics(self,force=False):
         if not self.lyrics:self.lyrics_screen.prev_line.text="";self.lyrics_screen.current_line.text="Nincs .lrc dalszöveg ehhez a számhoz." if self.current_path else "Indíts el egy zenét.";self.lyrics_screen.next_line.text="";return
         pos=self.audio.position();idx=-1
