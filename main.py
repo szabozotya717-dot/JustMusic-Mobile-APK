@@ -50,55 +50,77 @@ def fmt_time(seconds):
 
 
 def _clean_title_text(text):
-    """PC-s JustMusic!-hoz hasonló automatikus cím-takarítás."""
+    """Erős JustMusic! cím-takarítás letöltött / YouTube-os fájlnevekhez."""
     text = str(text or "").strip()
 
-    # yt-dlp / egyes letöltők gyakran " _ extra" részt raknak a végére.
     if " _ " in text:
         text = text.split(" _ ", 1)[0].strip()
 
     text = re.sub(r"[_]+", " ", text)
 
-    # YouTube / letöltő oldalak tipikus zárójeles toldalékai.
-    junk_patterns = [
-        r"\s*[\(\[]\s*(?:official\s*)?(?:music\s*)?(?:video|audio|lyrics?)\s*[\)\]]",
-        r"\s*[\(\[]\s*(?:video|audio|lyrics?)\s*(?:official)?\s*[\)\]]",
-        r"\s*[\(\[]\s*(?:hd|full\s*hd|4k|8k|visuali[sz]er|clean|explicit)\s*[\)\]]",
-        r"\s*[\(\[]\s*\d{2,4}\s*kbps\s*[\)\]]",
-        r"\s*[\(\[]\s*M\s*[\)\]]",
-    ]
+    # Zárójeles/bracketes sallangok: Official, Visualizer, Lyrics, évszám stb.
+    junk_inside = (
+        r"official(?:\s+music)?(?:\s+video|\s+audio|\s+visuali[sz]er)?|"
+        r"music\s+video|official\s+clip|video\s+clip|audio|video|"
+        r"visual|visuali[sz]er|lyrics?|lyric\s+video|"
+        r"hd|full\s*hd|4k|8k|clean|explicit|remaster(?:ed)?|"
+        r"\d{2,4}\s*kbps|m|19\d{2}|20\d{2}"
+    )
 
+    pattern = rf"\s*[\(\[\{{]\s*(?:{junk_inside})\s*[\)\]\}}]"
     previous = None
     while previous != text:
         previous = text
-        for pattern in junk_patterns:
-            text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
 
-    # Végi szöveges toldalékok.
+    # Olyan zárójeles rész, amiben a fenti kulcsszavak valamelyike szerepel.
     text = re.sub(
-        r"\s*[-–—|]\s*(?:official\s*)?(?:music\s*)?(?:video|audio|lyrics?)\s*$",
+        rf"\s*[\(\[\{{][^\)\]\}}]*(?:official|visuali[sz]er|visual|lyrics?|"
+        rf"music\s+video|video|audio|4k|8k|full\s*hd|remaster(?:ed)?|\b(?:19\d{{2}}|20\d{{2}})\b)[^\)\]\}}]*[\)\]\}}]",
         "",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     ).strip()
 
+    # Végi sallangok kötőjel / pipe után.
     text = re.sub(
-        r"\s*[-–—_]*\s*\d{2,4}\s*kbps\s*$",
+        r"\s*[-–—|:]\s*(?:official(?:\s+music)?\s*)?(?:video|audio|visuali[sz]er|visual|lyrics?|music\s+video)\s*$",
         "",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     ).strip()
 
-    # yt-dlp / YouTube ID: tipikusan 11 karakter a fájlnév végén.
-    # Pl. "Miyagi - Патрон (Official Audio) (M) Oh0Sjg8VLIQ"
+    # Évszám a cím legvégén: 1990–2099.
+    text = re.sub(r"(?:\s*[-–—|:]?\s*)\b(?:19\d{2}|20\d{2})\b\s*$", "", text).strip()
+
+    # Bitráta / minőség a végén.
+    text = re.sub(r"\s*[-–—_|:]*\s*(?:\d{2,4}\s*kbps|(?:full\s*)?hd|4k|8k)\s*$", "", text, flags=re.I).strip()
+
+    # Klasszikus YouTube ID (11 karakter) a végén.
+    text = re.sub(r"(?:\s+|\s*[-–—_]\s*)[A-Za-z0-9_-]{11}\s*$", "", text).strip()
+
+    # Rövidebb, véletlenszerűnek tűnő vég-tokenek (pl. Bskyjs).
+    # Csak akkor töröljük, ha 6–16 ASCII betű/szám és nincs benne normál magánhangzó,
+    # vagy szám / _ / - is van benne, így a rendes szavakat nem bántjuk annyira agresszíven.
+    m = re.search(r"\s+([A-Za-z0-9_-]{6,16})\s*$", text)
+    if m:
+        token = m.group(1)
+        looks_id = (
+            not re.search(r"[AEIOUaeiou]", token)
+            or bool(re.search(r"[0-9_-]", token))
+        )
+        if looks_id:
+            text = text[:m.start()].strip()
+
+    # Többször ismétlődő 'Official' / 'Video' sima szövegként is a végén.
     text = re.sub(
-        r"(?:\s+|\s*[-–—_]\s*)[A-Za-z0-9_-]{11}\s*$",
+        r"\s+(?:official|official\s+video|official\s+audio|official\s+visuali[sz]er|visuali[sz]er|visual|lyrics?|video|audio)\s*$",
         "",
-        text
+        text,
+        flags=re.I,
     ).strip()
 
-    # Csak TÉNYLEG hibás, pár nélküli szélső zárójeleket szedünk le.
-    # Így pl. a "(feat. Valaki)" érintetlen marad.
+    # Pár nélküli szélső zárójelek.
     for opening, closing in (("[", "]"), ("(", ")"), ("{", "}")):
         if text.startswith(opening) and text.count(opening) > text.count(closing):
             text = text[1:].strip()
@@ -131,17 +153,65 @@ def _metadata_artist_title(path):
         return "", ""
 
 
+def track_metadata(path):
+    """artist / title / album mobil könyvtárnézetekhez."""
+    artist = ""
+    title = ""
+    album = ""
+
+    if MutagenFile is not None:
+        try:
+            audio = MutagenFile(path, easy=True)
+            tags = getattr(audio, "tags", None) or {}
+
+            def first(key):
+                value = tags.get(key)
+                if isinstance(value, (list, tuple)):
+                    value = value[0] if value else ""
+                return str(value or "").strip()
+
+            artist = _clean_title_text(first("artist"))
+            title = _clean_title_text(first("title"))
+            album = _clean_title_text(first("album"))
+        except Exception:
+            pass
+
+    fallback = _clean_title_text(Path(path).stem)
+
+    if not title:
+        if " - " in fallback:
+            left, right = fallback.split(" - ", 1)
+            if not artist:
+                artist = left.strip()
+            title = right.strip()
+        else:
+            title = fallback
+
+    if not artist:
+        artist = "Ismeretlen előadó"
+
+    if not album:
+        album = "Ismeretlen album"
+
+    return {
+        "artist": artist,
+        "title": title or "Ismeretlen szám",
+        "album": album,
+    }
+
+
 def clean_title(path):
-    """A könyvtárban mindig tiszta, emberi címet mutat."""
-    artist, title = _metadata_artist_title(path)
+    info = track_metadata(path)
+    artist = info["artist"]
+    title = info["title"]
 
-    if title:
-        if artist and artist.casefold() not in title.casefold():
-            return f"{artist} - {title}"
-        return title
+    if artist and artist != "Ismeretlen előadó":
+        return f"{artist} - {title}"
+    return title
 
-    name = _clean_title_text(Path(path).stem)
-    return name or "Ismeretlen szám"
+
+def clean_song_title_only(path):
+    return track_metadata(path)["title"]
 
 
 def parse_lrc(audio_path):
@@ -446,55 +516,576 @@ class PlayerBar(GlassPanel):
             b.text = "MIX"; b.color = TEXT_2
 
 
+class MadeInHungaryBanner(GlassPanel):
+    def __init__(self, **kwargs):
+        super().__init__(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(86),
+            padding=[dp(14), dp(8)],
+            spacing=dp(1),
+            **kwargs
+        )
+        self.add_widget(Label(
+            text="[b][color=63D2FF]MADE IN HUNGARY[/color][/b]",
+            markup=True,
+            color=TEXT,
+            font_size="18sp",
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(32)
+        ))
+        info = Label(
+            text="Szabó Zoltán  •  IG: ZS420LLER",
+            color=TEXT_2,
+            font_size="12sp",
+            halign="left",
+            valign="middle"
+        )
+        info.bind(size=lambda inst, val: setattr(inst, "text_size", (inst.width, inst.height)))
+        self.add_widget(info)
+
+
+def make_song_row(path, refresh_callback=None):
+    app = App.get_running_app()
+    row = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(6))
+
+    title = clean_title(path)
+    play = Button(
+        text=title,
+        halign="left",
+        valign="middle",
+        text_size=(Window.width - dp(130), None),
+        background_normal="",
+        background_color=CARD,
+        color=TEXT,
+        font_size="15sp"
+    )
+    play.bind(on_release=lambda *_: app.play_path(path))
+
+    fav = Button(
+        text="★" if app.is_favorite(path) else "☆",
+        size_hint_x=None,
+        width=dp(52),
+        background_normal="",
+        background_color=PANEL_2,
+        color=ACCENT_2 if app.is_favorite(path) else TEXT_2,
+        font_size="21sp",
+        bold=True
+    )
+
+    def toggle(*_):
+        app.toggle_favorite(path)
+        fav.text = "★" if app.is_favorite(path) else "☆"
+        fav.color = ACCENT_2 if app.is_favorite(path) else TEXT_2
+        if refresh_callback:
+            refresh_callback()
+
+    fav.bind(on_release=toggle)
+    row.add_widget(play)
+    row.add_widget(fav)
+    return row
+
+
 class LibraryScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.add_widget(Image(source="party_bg.png", allow_stretch=True, keep_ratio=False))
         self.add_widget(DarkOverlay(.62))
-        root = BoxLayout(orientation="vertical", padding=[dp(14), dp(15), dp(14), dp(12)], spacing=dp(8))
-        brand = Label(text="[b][color=63D2FF]JustMusic![/color][/b]", markup=True, font_size="27sp", size_hint_y=None, height=dp(56), halign="left", valign="middle")
-        brand.bind(size=lambda i,v: setattr(i,"text_size",(i.width,i.height))); root.add_widget(brand)
-        self.search = TextInput(hint_text="Keresés a zenék között…", multiline=False, size_hint_y=None, height=dp(46), background_normal="", background_active="", background_color=(.03,.11,.19,.96), foreground_color=TEXT, hint_text_color=MUTED, cursor_color=ACCENT_2, padding=[dp(14),dp(12)])
-        self.search.bind(text=lambda *_: self.refresh_list()); root.add_widget(self.search)
-        p = GlassPanel(size_hint_y=None, height=dp(58), padding=[dp(13),dp(7)])
+
+        root = BoxLayout(
+            orientation="vertical",
+            padding=[dp(14), dp(12), dp(14), dp(10)],
+            spacing=dp(7)
+        )
+
+        brand = Label(
+            text="[b][color=63D2FF]JustMusic![/color][/b]",
+            markup=True,
+            font_size="27sp",
+            size_hint_y=None,
+            height=dp(48),
+            halign="left",
+            valign="middle"
+        )
+        brand.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        root.add_widget(brand)
+        root.add_widget(MadeInHungaryBanner())
+
+        # Mobil könyvtár-navigáció: a PC-s fő nézetekből áthozva.
+        nav1 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
+        nav2 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
+        for parent, text, target in (
+            (nav1, "DALOK", "library"),
+            (nav1, "ELŐADÓK", "artists"),
+            (nav1, "ALBUMOK", "albums"),
+            (nav2, "KEDVENCEK", "favorites"),
+            (nav2, "CONNECT", "connect"),
+            (nav2, "FRISSÍTÉS", "refresh"),
+        ):
+            b = Button(
+                text=text,
+                background_normal="",
+                background_color=PANEL_2,
+                color=ACCENT_2 if target != "refresh" else TEXT_2,
+                bold=True,
+                font_size="10sp"
+            )
+            if target == "refresh":
+                b.bind(on_release=lambda *_: App.get_running_app().scan())
+            else:
+                b.bind(on_release=lambda _, t=target: App.get_running_app().open_screen(t))
+            parent.add_widget(b)
+        root.add_widget(nav1)
+        root.add_widget(nav2)
+
+        self.search = TextInput(
+            hint_text="Keresés a zenék között…",
+            multiline=False,
+            size_hint_y=None,
+            height=dp(46),
+            background_normal="",
+            background_active="",
+            background_color=(.03, .11, .19, .96),
+            foreground_color=TEXT,
+            hint_text_color=MUTED,
+            cursor_color=ACCENT_2,
+            padding=[dp(14), dp(12)]
+        )
+        self.search.bind(text=lambda *_: self.refresh_list())
+        root.add_widget(self.search)
+
+        p = GlassPanel(size_hint_y=None, height=dp(54), padding=[dp(13), dp(7)])
         self.status = Label(text="Zenetár betöltése…", color=TEXT_2, halign="left", valign="middle")
-        self.status.bind(size=lambda i,v:setattr(i,"text_size",(i.width,i.height))); p.add_widget(self.status); root.add_widget(p)
+        self.status.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        p.add_widget(self.status)
+        root.add_widget(p)
+
         scroll = ScrollView(do_scroll_x=False)
-        self.box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None, padding=[0,dp(3),0,dp(7)])
-        self.box.bind(minimum_height=self.box.setter("height")); scroll.add_widget(self.box); root.add_widget(scroll)
-        self.player = PlayerBar(); root.add_widget(self.player); self.add_widget(root)
+        self.box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None, padding=[0, dp(3), 0, dp(7)])
+        self.box.bind(minimum_height=self.box.setter("height"))
+        scroll.add_widget(self.box)
+        root.add_widget(scroll)
+
+        self.player = PlayerBar()
+        root.add_widget(self.player)
+        self.add_widget(root)
+
+    def on_pre_enter(self, *_):
+        self.refresh_list()
 
     def refresh_list(self):
-        app = App.get_running_app(); self.box.clear_widgets(); q = self.search.text.strip().lower(); visible=[]
-        for idx,p in enumerate(app.songs):
-            title=clean_title(p)
-            if not q or q in title.lower(): visible.append((idx,title))
-        self.status.text = f"{len(visible)} dal • {app.backend_name}" if app.songs else "Nem találtam zenét a Music / Download mappában."
-        for idx,title in visible:
-            b=Button(text=title,size_hint_y=None,height=dp(55),halign="left",valign="middle",text_size=(Window.width-dp(70),None),background_normal="",background_color=CARD,color=TEXT,font_size="15sp")
-            b.bind(on_release=lambda _,i=idx:app.play_index(i)); self.box.add_widget(b)
+        app = App.get_running_app()
+        self.box.clear_widgets()
+        q = self.search.text.strip().lower()
+        visible = []
+
+        for path in app.songs:
+            title = clean_title(path)
+            if not q or q in title.lower():
+                visible.append(path)
+
+        self.status.text = (
+            f"{len(visible)} dal • {app.backend_name}"
+            if app.songs
+            else "Nem találtam zenét a Music / Download mappában."
+        )
+
+        for path in visible:
+            self.box.add_widget(make_song_row(path, self.refresh_list))
 
 
 class LyricsScreen(Screen):
+    """Teljes, görgethető, szinkronizált LRC nézet."""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.add_widget(Image(source="party_bg.png", allow_stretch=True, keep_ratio=False)); self.add_widget(DarkOverlay(.56))
-        root=BoxLayout(orientation="vertical",padding=dp(18),spacing=dp(8))
-        top=BoxLayout(size_hint_y=None,height=dp(54)); back=Button(text="VISSZA",size_hint_x=None,width=dp(88),background_normal="",background_color=PANEL_2,color=TEXT,bold=True); back.bind(on_release=lambda *_:App.get_running_app().show_library())
-        self.track=Label(text="[b]JustMusic! • Dalszöveg[/b]",markup=True,color=TEXT,halign="left",valign="middle"); self.track.bind(size=lambda i,v:setattr(i,"text_size",(i.width,i.height))); top.add_widget(back); top.add_widget(self.track); root.add_widget(top); root.add_widget(Widget())
-        self.prev_line=self._line((.72,.86,.96,.9),"19sp"); self.current_line=self._line(TEXT,"30sp"); self.next_line=self._line((.72,.86,.96,.9),"19sp")
-        root.add_widget(self.prev_line); root.add_widget(self.current_line); root.add_widget(self.next_line); root.add_widget(Widget())
-        self.time=Label(text="0:00 / 0:00",size_hint_y=None,height=dp(34),color=ACCENT_2,bold=True); root.add_widget(self.time); self.add_widget(root)
-    def _line(self,color,size):
-        l=Label(text="",color=color,font_size=size,bold=True,halign="center",valign="middle"); l.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20),None))); return l
+        self.add_widget(Image(source="party_bg.png", allow_stretch=True, keep_ratio=False))
+        self.add_widget(DarkOverlay(.60))
+
+        self.lyric_widgets = []
+        self.active_index = -1
+
+        root = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(7))
+        top = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(6))
+        back = Button(
+            text="VISSZA",
+            size_hint_x=None,
+            width=dp(88),
+            background_normal="",
+            background_color=PANEL_2,
+            color=TEXT,
+            bold=True
+        )
+        back.bind(on_release=lambda *_: App.get_running_app().show_library())
+        self.track = Label(
+            text="[b]JustMusic! • Dalszöveg[/b]",
+            markup=True,
+            color=TEXT,
+            halign="left",
+            valign="middle"
+        )
+        self.track.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        top.add_widget(back)
+        top.add_widget(self.track)
+        root.add_widget(top)
+
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.lyrics_box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(6),
+            padding=[dp(4), dp(100), dp(4), dp(160)]
+        )
+        self.lyrics_box.bind(minimum_height=self.lyrics_box.setter("height"))
+        self.scroll.add_widget(self.lyrics_box)
+        root.add_widget(self.scroll)
+
+        self.time = Label(
+            text="0:00 / 0:00",
+            size_hint_y=None,
+            height=dp(34),
+            color=ACCENT_2,
+            bold=True
+        )
+        root.add_widget(self.time)
+        self.add_widget(root)
+
+    def on_pre_enter(self, *_):
+        self.rebuild_lyrics()
+
+    def rebuild_lyrics(self):
+        app = App.get_running_app()
+        self.lyrics_box.clear_widgets()
+        self.lyric_widgets = []
+        self.active_index = -1
+
+        if not app.lyrics:
+            label = Label(
+                text="Nincs .lrc dalszöveg ehhez a számhoz.",
+                color=TEXT,
+                font_size="22sp",
+                bold=True,
+                size_hint_y=None,
+                height=dp(180),
+                halign="center",
+                valign="middle"
+            )
+            label.bind(size=lambda i, v: setattr(i, "text_size", (i.width - dp(20), i.height)))
+            self.lyrics_box.add_widget(label)
+            return
+
+        for index, (timestamp, text) in enumerate(app.lyrics):
+            row = Button(
+                text=text,
+                size_hint_y=None,
+                height=dp(62),
+                background_normal="",
+                background_color=(0.03, 0.09, 0.15, 0.45),
+                color=(0.72, 0.84, 0.94, 1),
+                font_size="18sp",
+                bold=True,
+                halign="center",
+                valign="middle",
+                text_size=(Window.width - dp(52), None)
+            )
+            row.bind(on_release=lambda _, ts=timestamp: app.seek_to(ts))
+            self.lyrics_box.add_widget(row)
+            self.lyric_widgets.append(row)
+
+        self.set_active(app.lyric_index, force=True)
+
+    def set_active(self, index, force=False):
+        if not self.lyric_widgets:
+            return
+        if not force and index == self.active_index:
+            return
+
+        old = self.active_index
+        self.active_index = index
+
+        if 0 <= old < len(self.lyric_widgets):
+            widget = self.lyric_widgets[old]
+            widget.color = (0.72, 0.84, 0.94, 1)
+            widget.background_color = (0.03, 0.09, 0.15, 0.45)
+            widget.font_size = "18sp"
+
+        if 0 <= index < len(self.lyric_widgets):
+            widget = self.lyric_widgets[index]
+            widget.color = TEXT
+            widget.background_color = (0.10, 0.34, 0.52, 0.72)
+            widget.font_size = "23sp"
+            Clock.schedule_once(lambda *_: self.scroll.scroll_to(widget, padding=dp(115), animate=True), 0.03)
 
 
 class BaseFeature(Screen):
+
     def make(self,title):
         self.add_widget(Image(source="party_bg.png",allow_stretch=True,keep_ratio=False)); self.add_widget(DarkOverlay(.68))
         root=BoxLayout(orientation="vertical",padding=dp(18),spacing=dp(12)); top=BoxLayout(size_hint_y=None,height=dp(54))
         back=Button(text="VISSZA",size_hint_x=None,width=dp(88),background_normal="",background_color=PANEL_2,color=TEXT,bold=True); back.bind(on_release=lambda *_:App.get_running_app().show_library())
-        lab=Label(text=f"[b]{title}[/b]",markup=True,color=TEXT,font_size="23sp",halign="left",valign="middle"); lab.bind(size=lambda i,v:setattr(i,"text_size",(i.width,i.height))); top.add_widget(back); top.add_widget(lab); root.add_widget(top); self.add_widget(root); return root
+        lab=Label(text=f"[b]{title}[/b]",markup=True,color=TEXT,font_size="23sp",halign="left",valign="middle"); lab.bind(size=lambda i,v:setattr(i,"text_size",(i.width,i.height))); self.title_label=lab; top.add_widget(back); top.add_widget(lab); root.add_widget(top); self.add_widget(root); return root
+
+
+class ArtistsScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("ELŐADÓK")
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def on_pre_enter(self, *_):
+        self.refresh()
+
+    def refresh(self):
+        app = App.get_running_app()
+        self.box.clear_widgets()
+        groups = {}
+        for path in app.songs:
+            artist = track_metadata(path)["artist"]
+            groups.setdefault(artist, []).append(path)
+
+        for artist in sorted(groups, key=str.casefold):
+            tracks = groups[artist]
+            b = Button(
+                text=f"{artist}\n{len(tracks)} dal",
+                size_hint_y=None,
+                height=dp(66),
+                background_normal="",
+                background_color=CARD,
+                color=TEXT,
+                halign="left",
+                valign="middle",
+                text_size=(Window.width - dp(58), None),
+                bold=True
+            )
+            b.bind(on_release=lambda _, a=artist: app.open_artist(a))
+            self.box.add_widget(b)
+
+
+class ArtistTracksScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("ELŐADÓ")
+        self.artist = None
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def set_artist(self, artist):
+        self.artist = artist
+        self.title_label.text = f"[b]{artist}[/b]"
+        self.refresh()
+
+    def refresh(self):
+        self.box.clear_widgets()
+        app = App.get_running_app()
+        for path in app.songs:
+            if track_metadata(path)["artist"] == self.artist:
+                self.box.add_widget(make_song_row(path, self.refresh))
+
+
+class AlbumsScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("ALBUMOK")
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def on_pre_enter(self, *_):
+        self.refresh()
+
+    def refresh(self):
+        app = App.get_running_app()
+        self.box.clear_widgets()
+        groups = {}
+        for path in app.songs:
+            info = track_metadata(path)
+            key = (info["album"], info["artist"])
+            groups.setdefault(key, []).append(path)
+
+        for album, artist in sorted(groups, key=lambda x: (x[0].casefold(), x[1].casefold())):
+            tracks = groups[(album, artist)]
+            b = Button(
+                text=f"{album}\n{artist} • {len(tracks)} dal",
+                size_hint_y=None,
+                height=dp(72),
+                background_normal="",
+                background_color=CARD,
+                color=TEXT,
+                halign="left",
+                valign="middle",
+                text_size=(Window.width - dp(58), None),
+                bold=True
+            )
+            b.bind(on_release=lambda _, a=album, ar=artist: app.open_album(a, ar))
+            self.box.add_widget(b)
+
+
+class AlbumTracksScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("ALBUM")
+        self.album = None
+        self.artist = None
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def set_album(self, album, artist):
+        self.album = album
+        self.artist = artist
+        self.title_label.text = f"[b]{album}[/b]"
+        self.refresh()
+
+    def refresh(self):
+        self.box.clear_widgets()
+        app = App.get_running_app()
+        for path in app.songs:
+            info = track_metadata(path)
+            if info["album"] == self.album and info["artist"] == self.artist:
+                self.box.add_widget(make_song_row(path, self.refresh))
+
+
+class FavoritesScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("KEDVENCEK")
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def on_pre_enter(self, *_):
+        self.refresh()
+
+    def refresh(self):
+        app = App.get_running_app()
+        self.box.clear_widgets()
+        paths = [p for p in app.songs if app.is_favorite(p)]
+
+        if not paths:
+            self.box.add_widget(Label(
+                text="Még nincs kedvenc dalod.\nA csillaggal tudsz hozzáadni.",
+                color=TEXT_2,
+                size_hint_y=None,
+                height=dp(130),
+                halign="center"
+            ))
+            return
+
+        for path in paths:
+            self.box.add_widget(make_song_row(path, self.refresh))
+
+
+class ConnectScreen(BaseFeature):
+    """Android Bluetooth / Connect nézet, a PC-s Connect mobil megfelelője."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("CONNECT")
+
+        current = GlassPanel(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(106),
+            padding=dp(12),
+            spacing=dp(3)
+        )
+        current.add_widget(Label(
+            text="[b]Ez a telefon[/b]   •   [color=63D2FF]AKTÍV[/color]",
+            markup=True,
+            color=TEXT,
+            font_size="19sp",
+            halign="left",
+            valign="middle"
+        ))
+        self.now = Label(text="JustMusic!", color=TEXT_2, halign="left", valign="middle")
+        self.now.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
+        current.add_widget(self.now)
+        root.add_widget(current)
+
+        controls = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+        refresh = Button(
+            text="ESZKÖZÖK FRISSÍTÉSE",
+            background_normal="",
+            background_color=PANEL_2,
+            color=ACCENT_2,
+            bold=True
+        )
+        settings = Button(
+            text="BLUETOOTH BEÁLLÍTÁSOK",
+            background_normal="",
+            background_color=ACCENT,
+            color=(0, .07, .12, 1),
+            bold=True
+        )
+        refresh.bind(on_release=lambda *_: self.refresh_devices())
+        settings.bind(on_release=lambda *_: App.get_running_app().open_bluetooth_settings())
+        controls.add_widget(refresh)
+        controls.add_widget(settings)
+        root.add_widget(controls)
+
+        self.info = Label(
+            text="Párosított Bluetooth-eszközök",
+            color=MUTED,
+            size_hint_y=None,
+            height=dp(34),
+            halign="left"
+        )
+        root.add_widget(self.info)
+
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def on_pre_enter(self, *_):
+        app = App.get_running_app()
+        self.now.text = clean_title(app.current_path) if app.current_path else "Nincs lejátszás"
+        self.refresh_devices()
+
+    def refresh_devices(self):
+        app = App.get_running_app()
+        self.box.clear_widgets()
+        devices = app.bluetooth_devices()
+
+        if not devices:
+            self.box.add_widget(Label(
+                text="Nem találtam párosított Bluetooth-eszközt.\nNyisd meg a Bluetooth beállításokat a párosításhoz.",
+                color=TEXT_2,
+                size_hint_y=None,
+                height=dp(120),
+                halign="center"
+            ))
+            return
+
+        for name, address in devices:
+            b = Button(
+                text=f"{name}\n{address}",
+                size_hint_y=None,
+                height=dp(68),
+                background_normal="",
+                background_color=CARD,
+                color=TEXT,
+                halign="left",
+                valign="middle",
+                text_size=(Window.width - dp(58), None)
+            )
+            # Androidon az output-váltást a rendszer kezeli; koppintásra megnyitjuk a BT panelt.
+            b.bind(on_release=lambda *_: app.open_bluetooth_settings())
+            self.box.add_widget(b)
 
 
 class MixScreen(BaseFeature):
@@ -811,9 +1402,9 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.2"
+        self.title="JustMusic! Mobile v1.3"
         Window.clearcolor=BG
-        self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1
+        self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set()
         self.audio=NativeAudio(); self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
         self.shuffle_enabled=False; self.repeat_mode="off"
         # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
@@ -831,7 +1422,21 @@ class JustMusicApp(App):
         self.eq_values=[0,0,0,0,0]; self.replaygain_enabled=True; self.user_volume=.92; self.current_rg_db=0.0; self.sleep_deadline=None; self.paused_position=0.0
         self.load_settings()
         self.manager=ScreenManager(); self.library=LibraryScreen(name="library"); self.lyrics_screen=LyricsScreen(name="lyrics")
-        for s in (self.library,self.lyrics_screen,MixScreen(name="mix"),EQScreen(name="eq"),RGScreen(name="rg"),QueueScreen(name="queue"),SleepScreen(name="sleep")): self.manager.add_widget(s)
+        self.artists_screen=ArtistsScreen(name="artists")
+        self.artist_tracks_screen=ArtistTracksScreen(name="artist_tracks")
+        self.albums_screen=AlbumsScreen(name="albums")
+        self.album_tracks_screen=AlbumTracksScreen(name="album_tracks")
+        self.favorites_screen=FavoritesScreen(name="favorites")
+        self.connect_screen=ConnectScreen(name="connect")
+        for s in (
+            self.library, self.lyrics_screen,
+            self.artists_screen, self.artist_tracks_screen,
+            self.albums_screen, self.album_tracks_screen,
+            self.favorites_screen, self.connect_screen,
+            MixScreen(name="mix"), EQScreen(name="eq"), RGScreen(name="rg"),
+            QueueScreen(name="queue"), SleepScreen(name="sleep")
+        ):
+            self.manager.add_widget(s)
         self.library.player.set_shuffle(self.shuffle_enabled); self.library.player.set_repeat(self.repeat_mode)
         self.library.player.set_mix_status(self.crossfade_enabled,self.mix_gapless_enabled,self.mix_fade_out_seconds,self.mix_fade_in_seconds)
         Clock.schedule_interval(self.tick,.10); Clock.schedule_once(lambda *_:self.permissions(),.4); Clock.schedule_once(lambda *_:self.scan(),1.2)
@@ -852,6 +1457,7 @@ class JustMusicApp(App):
             self.mix_dj_mode_enabled=bool(mix.get("dj",False))
             if self.mix_gapless_enabled:self.crossfade_enabled=False
             self.eq_values=list(d.get("eq",[0,0,0,0,0]))[:5]; self.replaygain_enabled=bool(d.get("rg",True))
+            self.favorites=set(str(p) for p in d.get("favorites", []))
             while len(self.eq_values)<5:self.eq_values.append(0)
         except Exception: pass
     def save_settings(self):
@@ -869,14 +1475,20 @@ class JustMusicApp(App):
                     "dj":self.mix_dj_mode_enabled,
                 },
                 "eq":self.eq_values,
-                "rg":self.replaygain_enabled
+                "rg":self.replaygain_enabled,
+                "favorites":sorted(self.favorites)
             },ensure_ascii=False),encoding="utf-8")
         except Exception: pass
     def permissions(self):
         if platform!="android":return
         try:
             from android.permissions import request_permissions
-            request_permissions(["android.permission.READ_MEDIA_AUDIO","android.permission.READ_EXTERNAL_STORAGE"])
+            request_permissions([
+                "android.permission.READ_MEDIA_AUDIO",
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.BLUETOOTH_CONNECT",
+                "android.permission.BLUETOOTH_SCAN",
+            ])
         except Exception as e: print("Permission:",e)
     def scan(self):
         roots=["/storage/emulated/0/Music","/storage/emulated/0/Download"] if platform=="android" else [str(Path.home()/"Music")]
@@ -887,7 +1499,14 @@ class JustMusicApp(App):
                 for f in files:
                     if f.lower().endswith(SUPPORTED_AUDIO):
                         p=os.path.join(folder,f); found[os.path.realpath(p).lower()]=p
-        self.songs=sorted(found.values(),key=lambda p:clean_title(p).lower()); self.library.refresh_list()
+        self.songs=sorted(found.values(),key=lambda p:clean_title(p).lower())
+        self.library.refresh_list()
+        try:self.artists_screen.refresh()
+        except Exception:pass
+        try:self.albums_screen.refresh()
+        except Exception:pass
+        try:self.favorites_screen.refresh()
+        except Exception:pass
     def queue_snapshot(self):
         if not self.songs:return []
         if self.current_index<0:return list(self.songs)
@@ -916,6 +1535,10 @@ class JustMusicApp(App):
         if not ok:self.library.status.text="Ezt a fájlt nem sikerült megnyitni.";return
         self.current_index=i;self.current_path=p;self.lyrics=parse_lrc(p);self.lyric_index=-1;self.current_rg_db=replaygain_db(p)
         title=clean_title(p);self.library.player.title.text=f"[b]{title}[/b]";self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
+        try:self.lyrics_screen.rebuild_lyrics()
+        except Exception:pass
+        try:self.connect_screen.now.text=title
+        except Exception:pass
         self.audio.start();self.audio.apply_eq(self.eq_values);self.apply_volume();self.library.player.set_playing(True);self.refresh_lyrics(True)
     def apply_volume(self):
         gain=self.current_rg_db if self.replaygain_enabled else 0; self.audio.volume(max(0,min(1,self.user_volume*(10**(gain/20)))))
@@ -937,8 +1560,68 @@ class JustMusicApp(App):
         seq=["off","all","one"];self.repeat_mode=seq[(seq.index(self.repeat_mode)+1)%3];self.library.player.set_repeat(self.repeat_mode);self.save_settings()
     def seek_to(self,s):self.audio.seek(s)
     def show_library(self):self.manager.current="library"
-    def open_lyrics(self):self.refresh_lyrics(True);self.manager.current="lyrics"
+    def open_lyrics(self):
+        try:self.lyrics_screen.rebuild_lyrics()
+        except Exception:pass
+        self.refresh_lyrics(True);self.manager.current="lyrics"
     def open_screen(self,n):self.manager.current=n
+
+    def favorite_key(self, path):
+        try:return os.path.realpath(str(path))
+        except Exception:return str(path)
+
+    def is_favorite(self, path):
+        return self.favorite_key(path) in self.favorites
+
+    def toggle_favorite(self, path):
+        key=self.favorite_key(path)
+        if key in self.favorites:self.favorites.remove(key)
+        else:self.favorites.add(key)
+        self.save_settings()
+
+    def open_artist(self, artist):
+        self.artist_tracks_screen.set_artist(artist)
+        self.manager.current="artist_tracks"
+
+    def open_album(self, album, artist):
+        self.album_tracks_screen.set_album(album, artist)
+        self.manager.current="album_tracks"
+
+    def bluetooth_devices(self):
+        if platform != "android":
+            return [("Androidon jelennek meg a párosított eszközök", "TESZT MÓD")]
+        try:
+            from jnius import autoclass
+            BluetoothAdapter=autoclass("android.bluetooth.BluetoothAdapter")
+            adapter=BluetoothAdapter.getDefaultAdapter()
+            if adapter is None:return []
+            bonded=adapter.getBondedDevices()
+            iterator=bonded.iterator()
+            devices=[]
+            while iterator.hasNext():
+                device=iterator.next()
+                try:name=str(device.getName() or "Bluetooth eszköz")
+                except Exception:name="Bluetooth eszköz"
+                try:address=str(device.getAddress() or "")
+                except Exception:address=""
+                devices.append((name,address))
+            devices.sort(key=lambda x:x[0].casefold())
+            return devices
+        except Exception as e:
+            print("Bluetooth lista hiba:",e)
+            return []
+
+    def open_bluetooth_settings(self):
+        if platform != "android":return
+        try:
+            from jnius import autoclass
+            Intent=autoclass("android.content.Intent")
+            Settings=autoclass("android.provider.Settings")
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            intent=Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+            PythonActivity.mActivity.startActivity(intent)
+        except Exception as e:
+            print("Bluetooth settings hiba:",e)
     def _base_volume_for_gain(self, gain_db):
         gain = gain_db if self.replaygain_enabled else 0.0
         return max(0.0, min(1.0, self.user_volume * (10 ** (gain / 20.0))))
@@ -1082,6 +1765,10 @@ class JustMusicApp(App):
                 title=clean_title(self.current_path)
                 self.library.player.title.text=f"[b]{title}[/b]"
                 self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
+                try:self.lyrics_screen.rebuild_lyrics()
+                except Exception:pass
+                try:self.connect_screen.now.text=title
+                except Exception:pass
 
             self.mix_in_progress=False
             self.mix_target_index=None
@@ -1146,15 +1833,16 @@ class JustMusicApp(App):
                 else:
                     self.next()
     def refresh_lyrics(self,force=False):
-        if not self.lyrics:self.lyrics_screen.prev_line.text="";self.lyrics_screen.current_line.text="Nincs .lrc dalszöveg ehhez a számhoz." if self.current_path else "Indíts el egy zenét.";self.lyrics_screen.next_line.text="";return
+        if not self.lyrics:
+            return
         pos=self.audio.position();idx=-1
         for i,(ts,_) in enumerate(self.lyrics):
             if pos>=ts:idx=i
             else:break
         if not force and idx==self.lyric_index:return
-        self.lyric_index=idx;cur=max(0,idx)
-        line=lambda i:self.lyrics[i][1] if 0<=i<len(self.lyrics) else ""
-        self.lyrics_screen.prev_line.text=line(cur-1);self.lyrics_screen.current_line.text=line(cur);self.lyrics_screen.next_line.text=line(cur+1)
+        self.lyric_index=idx
+        try:self.lyrics_screen.set_active(idx, force=force)
+        except Exception:pass
     def on_stop(self):self.save_settings();self.audio.close()
 
 
