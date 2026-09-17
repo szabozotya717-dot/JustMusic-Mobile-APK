@@ -3,6 +3,11 @@ import re
 import json
 import random
 import time
+import hashlib
+import threading
+import urllib.parse
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 from kivy.app import App
@@ -214,14 +219,48 @@ def clean_song_title_only(path):
     return track_metadata(path)["title"]
 
 
-def parse_lrc(audio_path):
-    p = Path(audio_path).with_suffix(".lrc")
-    if not p.exists():
-        return []
+def _lyrics_cache_path(audio_path):
+    """Android-barát LRC cache: nem kell írni a Music/Download mappába."""
     try:
-        text = p.read_text(encoding="utf-8", errors="ignore")
+        app = App.get_running_app()
+        base = Path(app.user_data_dir) / "lyrics_cache"
     except Exception:
+        base = Path.home() / ".justmusic_lyrics_cache"
+
+    key = hashlib.sha1(
+        str(audio_path).encode("utf-8", errors="ignore")
+    ).hexdigest()[:20]
+
+    return base / f"{key}.lrc"
+
+
+def find_lrc_file(audio_path):
+    # 1) Kézzel mellétett .lrc mindig elsőbbséget kap.
+    sidecar = Path(audio_path).with_suffix(".lrc")
+    if sidecar.exists():
+        return sidecar
+
+    # 2) Automatikusan letöltött / generált LRC cache.
+    cached = _lyrics_cache_path(audio_path)
+    if cached.exists():
+        return cached
+
+    return None
+
+
+def parse_lrc(audio_path):
+    p = find_lrc_file(audio_path)
+    if p is None:
         return []
+
+    try:
+        text = p.read_text(encoding="utf-8-sig", errors="ignore")
+    except Exception:
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return []
+
     rows = []
     for raw in text.splitlines():
         stamps = re.findall(r"\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]", raw)
@@ -231,8 +270,288 @@ def parse_lrc(audio_path):
             if fraction:
                 frac = int(fraction) / (1000 if len(fraction) == 3 else 100)
             rows.append((int(mm) * 60 + int(ss) + frac, lyric))
+
     rows.sort(key=lambda x: x[0])
     return rows
+
+
+def _save_auto_lrc(audio_path, lrc_text):
+    text = str(lrc_text or "").strip()
+    if not text:
+        return None
+
+    # Android 11+ alatt a Music mappa gyakran read-only az app számára,
+    # ezért biztosan az app saját tárhelyére mentünk.
+    cache = _lyrics_cache_path(audio_path)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(text + ("" if text.endswith("\n") else "\n"), encoding="utf-8-sig")
+
+    # Ha a rendszer engedi, sidecar .lrc-t is készítünk a zenéhez.
+    try:
+        sidecar = Path(audio_path).with_suffix(".lrc")
+        sidecar.write_text(text + ("" if text.endswith("\n") else "\n"), encoding="utf-8-sig")
+    except Exception:
+        pass
+
+    return cache
+
+
+def _normalize_lyrics_search(text):
+    text = _clean_title_text(text)
+    text = str(text or "").strip().casefold()
+    return re.sub(r"\s+", " ", text)
+
+
+def _lrclib_request(endpoint, params):
+    query = urllib.parse.urlencode(
+        {k: v for k, v in params.items() if v not in (None, "")}
+    )
+    url = "https://lrclib.net" + endpoint
+    if query:
+        url += "?" + query
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "JustMusic-Mobile/1.4 (Android music player; https://lrclib.net)"
+        }
+    )
+
+    with urllib.request.urlopen(request, timeout=12) as response:
+        return json.loads(response.read().decode("utf-8", errors="replace"))
+
+
+def _score_lrclib(item, title, artist, duration):
+    score = 0
+    rt = _normalize_lyrics_search(item.get("trackName") or item.get("name"))
+    ra = _normalize_lyrics_search(item.get("artistName"))
+    wt = _normalize_lyrics_search(title)
+    wa = _normalize_lyrics_search(artist)
+
+    if wt and rt == wt:
+        score += 140
+    elif wt and (wt in rt or rt in wt):
+        score += 75
+
+    if wa and ra == wa:
+        score += 125
+    elif wa and (wa in ra or ra in wa):
+        score += 55
+
+    try:
+        rd = float(item.get("duration") or 0)
+        if duration and rd:
+            diff = abs(float(duration) - rd)
+            if diff <= 2:
+                score += 90
+            elif diff <= 5:
+                score += 55
+            elif diff <= 10:
+                score += 25
+            elif diff > 30:
+                score -= 35
+    except Exception:
+        pass
+
+    if item.get("syncedLyrics"):
+        score += 60
+
+    return score
+
+
+def _find_online_lyrics(audio_path, duration):
+    meta = track_metadata(audio_path)
+    title = _clean_title_text(meta.get("title"))
+    artist = _clean_title_text(meta.get("artist"))
+    album = _clean_title_text(meta.get("album"))
+
+    if artist in ("Ismeretlen előadó", "Unknown Artist"):
+        artist = ""
+    if album in ("Ismeretlen album", "Unknown Album"):
+        album = ""
+
+    exact_plain = None
+    results = []
+
+    # 1) LRCLIB exact — ugyanaz az elsődleges út, mint PC-n.
+    if title and artist and duration and duration > 0:
+        params = {
+            "track_name": title,
+            "artist_name": artist,
+            "duration": int(round(duration)),
+        }
+        if album:
+            params["album_name"] = album
+
+        try:
+            data = _lrclib_request("/api/get", params)
+            synced = str(data.get("syncedLyrics") or "").strip()
+            plain = str(data.get("plainLyrics") or "").strip()
+            if synced:
+                return {
+                    "kind": "synced",
+                    "text": synced,
+                    "source": "LRCLIB",
+                    "match": data,
+                }
+            if plain:
+                exact_plain = plain
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                print("LRCLIB GET HTTP:", error.code)
+        except Exception as error:
+            print("LRCLIB GET HIBA:", error)
+
+    # 2) LRCLIB több, lazább keresése.
+    searches = []
+    if title:
+        params = {"track_name": title}
+        if artist:
+            params["artist_name"] = artist
+        searches.append(params)
+
+    query = " ".join(x for x in (artist, title) if x).strip()
+    if query:
+        searches.append({"q": query})
+    if title:
+        searches.append({"q": title})
+
+    for params in searches:
+        try:
+            found = _lrclib_request("/api/search", params)
+            if isinstance(found, list):
+                results.extend(found)
+        except Exception as error:
+            print("LRCLIB SEARCH HIBA:", error)
+
+    unique = []
+    seen = set()
+    for item in results:
+        key = item.get("id") or (
+            item.get("trackName"), item.get("artistName"), item.get("duration")
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+
+    synced = [x for x in unique if x.get("syncedLyrics")]
+    if synced:
+        synced.sort(
+            key=lambda x: _score_lrclib(x, title, artist, duration),
+            reverse=True,
+        )
+        best = synced[0]
+        # Nagyon gyenge találatot ne mentsünk el automatikusan.
+        if _score_lrclib(best, title, artist, duration) >= 70:
+            return {
+                "kind": "synced",
+                "text": best.get("syncedLyrics"),
+                "source": "LRCLIB",
+                "match": best,
+            }
+
+    plain = [x for x in unique if x.get("plainLyrics")]
+    if plain:
+        plain.sort(
+            key=lambda x: _score_lrclib(x, title, artist, duration),
+            reverse=True,
+        )
+        best = plain[0]
+        if _score_lrclib(best, title, artist, duration) >= 70:
+            return {
+                "kind": "plain",
+                "text": best.get("plainLyrics"),
+                "source": "LRCLIB plain",
+                "match": best,
+            }
+
+    if exact_plain:
+        return {
+            "kind": "plain",
+            "text": exact_plain,
+            "source": "LRCLIB plain",
+            "match": None,
+        }
+
+    # 3) lyrics.ovh plain fallback.
+    if artist and title:
+        try:
+            url = (
+                "https://api.lyrics.ovh/v1/"
+                + urllib.parse.quote(artist, safe="")
+                + "/"
+                + urllib.parse.quote(title, safe="")
+            )
+            request = urllib.request.Request(
+                url,
+                headers={"User-Agent": "JustMusic-Mobile/1.4"}
+            )
+            with urllib.request.urlopen(request, timeout=12) as response:
+                data = json.loads(response.read().decode("utf-8", errors="replace"))
+            plain_text = str(data.get("lyrics") or "").strip()
+            if plain_text:
+                return {
+                    "kind": "plain",
+                    "text": plain_text,
+                    "source": "lyrics.ovh",
+                    "match": None,
+                }
+        except Exception as error:
+            print("LYRICS.OVH HIBA:", error)
+
+    return None
+
+
+def _plain_to_estimated_lrc(plain_text, duration, meta=None):
+    """Plain lyrics -> automatikus, becsült időzítés. Nem kézi munka."""
+    lines = []
+    for raw in str(plain_text or "").replace("\r", "").split("\n"):
+        line = raw.strip()
+        if not line:
+            continue
+        # API-k néha fölösleges fejlécet adnak vissza.
+        if line.casefold().startswith(("paroles de", "lyrics of")):
+            continue
+        lines.append(line)
+
+    if not lines:
+        return ""
+
+    try:
+        duration = float(duration or 0)
+    except Exception:
+        duration = 0.0
+
+    if duration <= 10:
+        duration = max(30.0, len(lines) * 4.2)
+
+    intro = min(8.0, max(2.0, duration * 0.025))
+    outro = min(8.0, max(2.0, duration * 0.02))
+    usable = max(10.0, duration - intro - outro)
+
+    # Hosszabb soroknak kicsit több időt hagyunk.
+    weights = [max(1.0, min(3.2, len(line) / 22.0)) for line in lines]
+    total_weight = sum(weights) or float(len(lines))
+
+    result = []
+    meta = meta or {}
+    artist = str(meta.get("artist") or "").strip()
+    title = str(meta.get("title") or "").strip()
+    if artist:
+        result.append(f"[ar:{artist}]")
+    if title:
+        result.append(f"[ti:{title}]")
+    result.append("[re:JustMusic! Auto Sync]")
+
+    elapsed = intro
+    for line, weight in zip(lines, weights):
+        mm = int(elapsed // 60)
+        ss = elapsed - mm * 60
+        result.append(f"[{mm:02d}:{ss:05.2f}]{line}")
+        elapsed += usable * (weight / total_weight)
+
+    return "\n".join(result)
 
 
 def replaygain_db(path):
@@ -730,6 +1049,21 @@ class LyricsScreen(Screen):
         top.add_widget(self.track)
         root.add_widget(top)
 
+        self.search_status = Label(
+            text="",
+            size_hint_y=None,
+            height=dp(30),
+            color=ACCENT_2,
+            bold=True,
+            font_size="12sp",
+            halign="center",
+            valign="middle"
+        )
+        self.search_status.bind(
+            size=lambda i, v: setattr(i, "text_size", (i.width, i.height))
+        )
+        root.add_widget(self.search_status)
+
         self.scroll = ScrollView(do_scroll_x=False)
         self.lyrics_box = BoxLayout(
             orientation="vertical",
@@ -754,6 +1088,13 @@ class LyricsScreen(Screen):
     def on_pre_enter(self, *_):
         self.rebuild_lyrics()
 
+    def set_search_status(self, text, color=None):
+        try:
+            self.search_status.text = str(text or "")
+            self.search_status.color = color or ACCENT_2
+        except Exception:
+            pass
+
     def rebuild_lyrics(self):
         app = App.get_running_app()
         self.lyrics_box.clear_widgets()
@@ -761,8 +1102,17 @@ class LyricsScreen(Screen):
         self.active_index = -1
 
         if not app.lyrics:
+            searching = bool(
+                app.current_path
+                and app.current_path in getattr(app, "lyrics_fetching", set())
+            )
+            message = (
+                "Automatikus dalszöveg-szinkron keresése…\nLRCLIB + online fallback"
+                if searching
+                else "Ehhez a számhoz még nincs szinkronizált dalszöveg."
+            )
             label = Label(
-                text="Nincs .lrc dalszöveg ehhez a számhoz.",
+                text=message,
                 color=TEXT,
                 font_size="22sp",
                 bold=True,
@@ -1402,9 +1752,9 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.3"
+        self.title="JustMusic! Mobile v1.4"
         Window.clearcolor=BG
-        self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set()
+        self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.audio=NativeAudio(); self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
         self.shuffle_enabled=False; self.repeat_mode="off"
         # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
@@ -1524,6 +1874,111 @@ class JustMusicApp(App):
         if self.shuffle_enabled and len(self.songs)>1:return random.choice([i for i in range(len(self.songs)) if i!=self.current_index])
         if self.current_index<=0:return len(self.songs)-1 if self.repeat_mode=="all" else 0
         return self.current_index-1
+    def auto_fetch_lyrics(self, audio_path):
+        """Ha nincs LRC, háttérben automatikusan keres és elmenti."""
+        if not audio_path:
+            return
+
+        # Ha közben már lett helyi/cache LRC, nincs teendő.
+        existing = parse_lrc(audio_path)
+        if existing:
+            if self.current_path == audio_path:
+                self.lyrics = existing
+            return
+
+        key = str(audio_path)
+        if key in self.lyrics_fetching:
+            return
+
+        self.lyrics_fetching.add(key)
+        self.lyrics_source = "Keresés…"
+
+        try:
+            if self.current_path == audio_path:
+                self.lyrics_screen.set_search_status(
+                    "Automatikus LRC keresés… • LRCLIB",
+                    ACCENT_2
+                )
+                self.lyrics_screen.rebuild_lyrics()
+        except Exception:
+            pass
+
+        duration = self.audio.duration() if self.current_path == audio_path else 0.0
+        meta = track_metadata(audio_path)
+
+        def worker():
+            result = None
+            error_text = None
+            try:
+                result = _find_online_lyrics(audio_path, duration)
+            except Exception as error:
+                error_text = str(error)
+                print("AUTO LRC HIBA:", error)
+
+            saved = None
+            source = ""
+            mode = ""
+
+            try:
+                if result:
+                    source = str(result.get("source") or "Online")
+                    kind = result.get("kind")
+                    text = str(result.get("text") or "").strip()
+
+                    if kind == "synced" and text:
+                        saved = _save_auto_lrc(audio_path, text)
+                        mode = "PONTOS SZINKRON"
+
+                    elif kind == "plain" and text:
+                        estimated = _plain_to_estimated_lrc(
+                            text,
+                            duration,
+                            meta
+                        )
+                        if estimated:
+                            saved = _save_auto_lrc(audio_path, estimated)
+                            mode = "AUTO BECSÜLT SZINKRON"
+            except Exception as error:
+                error_text = str(error)
+                print("AUTO LRC MENTÉSI HIBA:", error)
+
+            def finish(_dt):
+                self.lyrics_fetching.discard(key)
+
+                if saved:
+                    print("AUTO LRC ELMENTVE:", saved)
+
+                if self.current_path != audio_path:
+                    return
+
+                if saved:
+                    self.lyrics = parse_lrc(audio_path)
+                    self.lyric_index = -1
+                    self.lyrics_source = source
+                    try:
+                        self.lyrics_screen.set_search_status(
+                            f"{mode} • {source}",
+                            (0.45, 1.0, 0.72, 1.0)
+                        )
+                        self.lyrics_screen.rebuild_lyrics()
+                        self.refresh_lyrics(True)
+                    except Exception:
+                        pass
+                else:
+                    self.lyrics_source = ""
+                    try:
+                        self.lyrics_screen.set_search_status(
+                            "Nem találtam automatikusan dalszöveget.",
+                            (1.0, 0.62, 0.62, 1.0)
+                        )
+                        self.lyrics_screen.rebuild_lyrics()
+                    except Exception:
+                        pass
+
+            Clock.schedule_once(finish, 0)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def play_path(self,p):
         try:self.play_index(self.songs.index(p));self.show_library()
         except ValueError:pass
@@ -1533,13 +1988,18 @@ class JustMusicApp(App):
         try:ok=self.audio.load(p)
         except Exception as e:self.library.status.text=f"Lejátszási hiba: {e}";return
         if not ok:self.library.status.text="Ezt a fájlt nem sikerült megnyitni.";return
-        self.current_index=i;self.current_path=p;self.lyrics=parse_lrc(p);self.lyric_index=-1;self.current_rg_db=replaygain_db(p)
+        self.current_index=i;self.current_path=p;self.lyrics=parse_lrc(p);self.lyric_index=-1;self.lyrics_source="Helyi/cache LRC" if self.lyrics else "";self.current_rg_db=replaygain_db(p)
         title=clean_title(p);self.library.player.title.text=f"[b]{title}[/b]";self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
         try:self.lyrics_screen.rebuild_lyrics()
         except Exception:pass
         try:self.connect_screen.now.text=title
         except Exception:pass
         self.audio.start();self.audio.apply_eq(self.eq_values);self.apply_volume();self.library.player.set_playing(True);self.refresh_lyrics(True)
+        if not self.lyrics:
+            self.auto_fetch_lyrics(p)
+        else:
+            try:self.lyrics_screen.set_search_status("LRC betöltve • helyi/cache", (0.45,1.0,0.72,1.0))
+            except Exception:pass
     def apply_volume(self):
         gain=self.current_rg_db if self.replaygain_enabled else 0; self.audio.volume(max(0,min(1,self.user_volume*(10**(gain/20)))))
     def toggle_play(self):
@@ -1767,6 +2227,11 @@ class JustMusicApp(App):
                 self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
                 try:self.lyrics_screen.rebuild_lyrics()
                 except Exception:pass
+                if not self.lyrics:
+                    self.auto_fetch_lyrics(self.current_path)
+                else:
+                    try:self.lyrics_screen.set_search_status("LRC betöltve • helyi/cache", (0.45,1.0,0.72,1.0))
+                    except Exception:pass
                 try:self.connect_screen.now.text=title
                 except Exception:pass
 
