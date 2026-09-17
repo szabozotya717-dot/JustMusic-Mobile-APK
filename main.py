@@ -47,6 +47,196 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
 
+SUPPORTED_LANGUAGES = {
+    "hu": "Magyar",
+    "en": "English",
+    "de": "Deutsch",
+    "es": "Español",
+    "fr": "Français",
+    "it": "Italiano",
+}
+
+SUPPORTED_REGIONS = {
+    "HU": "Magyarország",
+    "GB": "United Kingdom",
+    "DE": "Deutschland",
+    "ES": "España",
+    "FR": "France",
+    "IT": "Italia",
+}
+
+TRANSLATIONS = {
+    "hu": {
+        "settings": "BEÁLLÍTÁSOK", "back": "VISSZA", "lyrics": "DALSZÖVEG",
+        "songs": "DALOK", "artists": "ELŐADÓK", "albums": "ALBUMOK",
+        "favorites": "KEDVENCEK", "connect": "CONNECT", "refresh": "FRISSÍTÉS",
+        "folders": "MAPPÁK", "playlists": "PLAYLISTEK", "now_playing": "MOST SZÓL",
+        "history": "ELŐZMÉNY", "stats": "STAT", "smart": "SMART",
+        "search_hint": "Keresés a zenék között…", "language_region": "NYELV ÉS RÉGIÓ",
+        "audio": "HANG", "library": "ZENETÁR", "appearance": "MEGJELENÉS",
+        "saving": "MENTÉS", "about": "NÉVJEGY", "language": "Nyelv", "region": "Régió",
+        "auto_save": "Automatikus mentés", "enabled": "BEKAPCSOLVA",
+        "welcome": "Üdv a JustMusic!-ban!", "welcome_sub": "Válaszd ki a nyelvet és a régiót.",
+        "continue": "FOLYTATÁS", "recommended": "Telefon alapján ajánlott",
+        "mix": "MIX / CROSSFADE", "equalizer": "5-SÁVOS EQ", "replaygain": "REPLAYGAIN",
+        "queue": "LEJÁTSZÁSI SOR", "sleep": "SLEEP TIMER", "music_folders": "ZENE MAPPÁK",
+        "recent": "NEMRÉG HALLGATOTT", "statistics": "STATISZTIKÁK",
+        "smart_lists": "SMART LISTÁK", "choose_folder": "MAPPA KIVÁLASZTÁSA",
+        "made_hungary": "MADE IN HUNGARY", "version": "Verzió",
+        "restart_note": "A nyelv azonnal frissül a felületen.",
+        "save_info": "A JustMusic! automatikusan menti a beállításokat, kedvenceket, playlisteket és az utolsó lejátszási pozíciót.",
+        "appearance_info": "Neon Glass / Party téma aktív.",
+        "tracks_found": "dal", "no_music": T("no_music"),
+    },
+    "en": {
+        "settings": "SETTINGS", "back": "BACK", "lyrics": "LYRICS",
+        "songs": "SONGS", "artists": "ARTISTS", "albums": "ALBUMS",
+        "favorites": "FAVORITES", "connect": "CONNECT", "refresh": "REFRESH",
+        "folders": "FOLDERS", "playlists": "PLAYLISTS", "now_playing": "NOW PLAYING",
+        "history": "HISTORY", "stats": "STATS", "smart": "SMART",
+        "search_hint": "Search your music…", "language_region": "LANGUAGE & REGION",
+        "audio": "AUDIO", "library": "LIBRARY", "appearance": "APPEARANCE",
+        "saving": "SAVING", "about": "ABOUT", "language": "Language", "region": "Region",
+        "auto_save": "Automatic saving", "enabled": "ENABLED",
+        "welcome": "Welcome to JustMusic!", "welcome_sub": "Choose your language and region.",
+        "continue": "CONTINUE", "recommended": "Recommended from phone",
+        "mix": "MIX / CROSSFADE", "equalizer": "5-BAND EQ", "replaygain": "REPLAYGAIN",
+        "queue": "PLAY QUEUE", "sleep": "SLEEP TIMER", "music_folders": "MUSIC FOLDERS",
+        "recent": "RECENTLY PLAYED", "statistics": "STATISTICS",
+        "smart_lists": "SMART LISTS", "choose_folder": "CHOOSE FOLDER",
+        "made_hungary": "MADE IN HUNGARY", "version": "Version",
+        "restart_note": "The interface language updates immediately.",
+        "save_info": "JustMusic! automatically saves settings, favorites, playlists and the last playback position.",
+        "appearance_info": "Neon Glass / Party theme is active.",
+        "tracks_found": "tracks", "no_music": "No music found in the configured music folders.",
+    },
+    "de": {
+        "settings": "EINSTELLUNGEN", "back": "ZURÜCK", "lyrics": "SONGTEXT",
+        "songs": "TITEL", "artists": "KÜNSTLER", "albums": "ALBEN",
+        "favorites": "FAVORITEN", "connect": "CONNECT", "refresh": "AKTUALISIEREN",
+        "folders": "ORDNER", "playlists": "PLAYLISTEN", "now_playing": "LÄUFT GERADE",
+        "history": "VERLAUF", "stats": "STATISTIK", "smart": "SMART",
+        "search_hint": "Musik durchsuchen…", "language_region": "SPRACHE & REGION",
+        "audio": "AUDIO", "library": "MEDIATHEK", "appearance": "DARSTELLUNG",
+        "saving": "SPEICHERN", "about": "INFO", "language": "Sprache", "region": "Region",
+        "auto_save": "Automatisch speichern", "enabled": "AKTIVIERT",
+        "welcome": "Willkommen bei JustMusic!", "welcome_sub": "Wähle Sprache und Region.",
+        "continue": "WEITER", "recommended": "Vom Telefon empfohlen",
+        "mix": "MIX / CROSSFADE", "equalizer": "5-BAND EQ", "replaygain": "REPLAYGAIN",
+        "queue": "WARTESCHLANGE", "sleep": "SLEEP TIMER", "music_folders": "MUSIKORDNER",
+        "recent": "ZULETZT GEHÖRT", "statistics": "STATISTIKEN", "smart_lists": "SMART-LISTEN",
+        "choose_folder": "ORDNER AUSWÄHLEN", "made_hungary": "MADE IN HUNGARY", "version": "Version",
+        "restart_note": "Die Sprache der Oberfläche wird sofort aktualisiert.",
+        "save_info": "JustMusic! speichert Einstellungen, Favoriten, Playlisten und die letzte Wiedergabeposition automatisch.",
+        "appearance_info": "Neon Glass / Party-Theme ist aktiv.", "tracks_found": "Titel",
+        "no_music": "Keine Musik in den eingerichteten Musikordnern gefunden.",
+    },
+    "es": {
+        "settings": "AJUSTES", "back": "VOLVER", "lyrics": "LETRA",
+        "songs": "CANCIONES", "artists": "ARTISTAS", "albums": "ÁLBUMES",
+        "favorites": "FAVORITOS", "connect": "CONNECT", "refresh": "ACTUALIZAR",
+        "folders": "CARPETAS", "playlists": "PLAYLISTS", "now_playing": "SONANDO",
+        "history": "HISTORIAL", "stats": "ESTAD.", "smart": "SMART",
+        "search_hint": "Buscar música…", "language_region": "IDIOMA Y REGIÓN",
+        "audio": "AUDIO", "library": "BIBLIOTECA", "appearance": "APARIENCIA",
+        "saving": "GUARDADO", "about": "ACERCA DE", "language": "Idioma", "region": "Región",
+        "auto_save": "Guardado automático", "enabled": "ACTIVADO",
+        "welcome": "¡Bienvenido a JustMusic!", "welcome_sub": "Elige tu idioma y región.",
+        "continue": "CONTINUAR", "recommended": "Recomendado por el teléfono",
+        "mix": "MIX / CROSSFADE", "equalizer": "EQ DE 5 BANDAS", "replaygain": "REPLAYGAIN",
+        "queue": "COLA", "sleep": "TEMPORIZADOR", "music_folders": "CARPETAS DE MÚSICA",
+        "recent": "RECIENTES", "statistics": "ESTADÍSTICAS", "smart_lists": "LISTAS SMART",
+        "choose_folder": "ELEGIR CARPETA", "made_hungary": "MADE IN HUNGARY", "version": "Versión",
+        "restart_note": "El idioma de la interfaz se actualiza al instante.",
+        "save_info": "JustMusic! guarda automáticamente ajustes, favoritos, playlists y la última posición.",
+        "appearance_info": "Tema Neon Glass / Party activo.", "tracks_found": "canciones",
+        "no_music": "No se encontró música en las carpetas configuradas.",
+    },
+    "fr": {
+        "settings": "PARAMÈTRES", "back": "RETOUR", "lyrics": "PAROLES",
+        "songs": "TITRES", "artists": "ARTISTES", "albums": "ALBUMS",
+        "favorites": "FAVORIS", "connect": "CONNECT", "refresh": "ACTUALISER",
+        "folders": "DOSSIERS", "playlists": "PLAYLISTS", "now_playing": "LECTURE",
+        "history": "HISTORIQUE", "stats": "STATS", "smart": "SMART",
+        "search_hint": "Rechercher dans la musique…", "language_region": "LANGUE ET RÉGION",
+        "audio": "AUDIO", "library": "BIBLIOTHÈQUE", "appearance": "APPARENCE",
+        "saving": "SAUVEGARDE", "about": "À PROPOS", "language": "Langue", "region": "Région",
+        "auto_save": "Sauvegarde automatique", "enabled": "ACTIVÉE",
+        "welcome": "Bienvenue dans JustMusic !", "welcome_sub": "Choisissez la langue et la région.",
+        "continue": "CONTINUER", "recommended": "Recommandé par le téléphone",
+        "mix": "MIX / CROSSFADE", "equalizer": "EQ 5 BANDES", "replaygain": "REPLAYGAIN",
+        "queue": "FILE D'ATTENTE", "sleep": "MINUTEUR", "music_folders": "DOSSIERS MUSIQUE",
+        "recent": "ÉCOUTÉS RÉCEMMENT", "statistics": "STATISTIQUES", "smart_lists": "LISTES SMART",
+        "choose_folder": "CHOISIR UN DOSSIER", "made_hungary": "MADE IN HUNGARY", "version": "Version",
+        "restart_note": "La langue de l'interface est mise à jour immédiatement.",
+        "save_info": "JustMusic! sauvegarde automatiquement les réglages, favoris, playlists et la dernière position.",
+        "appearance_info": "Thème Neon Glass / Party actif.", "tracks_found": "titres",
+        "no_music": "Aucune musique trouvée dans les dossiers configurés.",
+    },
+    "it": {
+        "settings": "IMPOSTAZIONI", "back": "INDIETRO", "lyrics": "TESTO",
+        "songs": "BRANI", "artists": "ARTISTI", "albums": "ALBUM",
+        "favorites": "PREFERITI", "connect": "CONNECT", "refresh": "AGGIORNA",
+        "folders": "CARTELLE", "playlists": "PLAYLIST", "now_playing": "IN RIPRODUZIONE",
+        "history": "CRONOLOGIA", "stats": "STAT", "smart": "SMART",
+        "search_hint": "Cerca nella musica…", "language_region": "LINGUA E REGIONE",
+        "audio": "AUDIO", "library": "LIBRERIA", "appearance": "ASPETTO",
+        "saving": "SALVATAGGIO", "about": "INFO", "language": "Lingua", "region": "Regione",
+        "auto_save": "Salvataggio automatico", "enabled": "ATTIVO",
+        "welcome": "Benvenuto in JustMusic!", "welcome_sub": "Scegli lingua e regione.",
+        "continue": "CONTINUA", "recommended": "Consigliato dal telefono",
+        "mix": "MIX / CROSSFADE", "equalizer": "EQ 5 BANDE", "replaygain": "REPLAYGAIN",
+        "queue": "CODA", "sleep": "SLEEP TIMER", "music_folders": "CARTELLE MUSICA",
+        "recent": "ASCOLTATI DI RECENTE", "statistics": "STATISTICHE", "smart_lists": "LISTE SMART",
+        "choose_folder": "SCEGLI CARTELLA", "made_hungary": "MADE IN HUNGARY", "version": "Versione",
+        "restart_note": "La lingua dell'interfaccia si aggiorna subito.",
+        "save_info": "JustMusic! salva automaticamente impostazioni, preferiti, playlist e l'ultima posizione.",
+        "appearance_info": "Tema Neon Glass / Party attivo.", "tracks_found": "brani",
+        "no_music": "Nessuna musica trovata nelle cartelle configurate.",
+    },
+}
+
+
+def T(key, default=None):
+    try:
+        app = App.get_running_app()
+        lang = getattr(app, "language", "hu") if app else "hu"
+    except Exception:
+        lang = "hu"
+    return TRANSLATIONS.get(lang, TRANSLATIONS["hu"]).get(
+        key,
+        TRANSLATIONS["hu"].get(key, default if default is not None else key)
+    )
+
+
+def detect_system_locale():
+    language = "hu"
+    region = "HU"
+    if platform == "android":
+        try:
+            from jnius import autoclass
+            Locale = autoclass("java.util.Locale")
+            current = Locale.getDefault()
+            language = str(current.getLanguage() or "hu").lower()
+            region = str(current.getCountry() or "HU").upper()
+        except Exception:
+            pass
+    else:
+        try:
+            import locale as _locale
+            loc = (_locale.getdefaultlocale()[0] or "hu_HU").replace("-", "_")
+            bits = loc.split("_")
+            language = bits[0].lower() if bits else "hu"
+            region = bits[1].upper() if len(bits) > 1 else "HU"
+        except Exception:
+            pass
+    if language not in SUPPORTED_LANGUAGES:
+        language = "en"
+    if region not in SUPPORTED_REGIONS:
+        region = "HU" if language == "hu" else "GB"
+    return language, region
+
+
 def fmt_time(seconds):
     try:
         seconds = max(0, int(seconds or 0))
@@ -890,7 +1080,7 @@ class PlayerBar(GlassPanel):
         row = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(6))
         self.title = Label(text="[b]JustMusic![/b]", markup=True, color=TEXT, halign="left", valign="middle")
         self.title.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
-        lyrics = Button(text="DALSZÖVEG", size_hint_x=None, width=dp(105), background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True)
+        lyrics = Button(text=T("lyrics"), size_hint_x=None, width=dp(105), background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True)
         lyrics.bind(on_release=lambda *_: App.get_running_app().open_lyrics())
         row.add_widget(self.title); row.add_widget(lyrics); self.add_widget(row)
 
@@ -916,7 +1106,7 @@ class PlayerBar(GlassPanel):
 
         features = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4))
         self.feature_buttons = {}
-        for text, target in (("MIX", "mix"), ("EQ", "eq"), ("RG", "rg"), ("QUEUE", "queue"), ("SLEEP", "sleep")):
+        for text, target in (("MIX", "mix"), ("EQ", "eq"), ("RG", "rg"), (T("queue"), "queue"), (T("sleep"), "sleep")):
             b = Button(text=text, background_normal="", background_color=(.03, .10, .17, .96), color=ACCENT_2, bold=True, font_size="10sp")
             b.bind(on_release=lambda _, n=target: App.get_running_app().open_screen(n))
             self.feature_buttons[target] = b
@@ -1043,29 +1233,40 @@ class LibraryScreen(Screen):
             spacing=dp(7)
         )
 
+        header = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
         brand = Label(
             text="[b][color=63D2FF]JustMusic![/color][/b]",
             markup=True,
             font_size="27sp",
-            size_hint_y=None,
-            height=dp(48),
             halign="left",
             valign="middle"
         )
         brand.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
-        root.add_widget(brand)
+        gear = Button(
+            text="",
+            size_hint_x=None,
+            width=dp(50),
+            background_normal="gear.png",
+            background_down="gear.png",
+            background_color=(1, 1, 1, 1),
+            border=(0, 0, 0, 0)
+        )
+        gear.bind(on_release=lambda *_: App.get_running_app().open_screen("settings"))
+        header.add_widget(brand)
+        header.add_widget(gear)
+        root.add_widget(header)
         root.add_widget(MadeInHungaryBanner())
 
         # Mobil könyvtár-navigáció: a PC-s fő nézetekből áthozva.
         nav1 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
         nav2 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
         for parent, text, target in (
-            (nav1, "DALOK", "library"),
-            (nav1, "ELŐADÓK", "artists"),
-            (nav1, "ALBUMOK", "albums"),
-            (nav2, "KEDVENCEK", "favorites"),
-            (nav2, "CONNECT", "connect"),
-            (nav2, "FRISSÍTÉS", "refresh"),
+            (nav1, T("songs"), "library"),
+            (nav1, T("artists"), "artists"),
+            (nav1, T("albums"), "albums"),
+            (nav2, T("favorites"), "favorites"),
+            (nav2, T("connect"), "connect"),
+            (nav2, T("refresh"), "refresh"),
         ):
             b = Button(
                 text=text,
@@ -1085,9 +1286,9 @@ class LibraryScreen(Screen):
 
         nav3 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
         for text, target in (
-            ("MAPPÁK", "folders"),
-            ("PLAYLISTEK", "playlists"),
-            ("MOST SZÓL", "now_playing"),
+            (T("folders"), "folders"),
+            (T("playlists"), "playlists"),
+            (T("now_playing"), "now_playing"),
         ):
             b = Button(
                 text=text,
@@ -1107,9 +1308,9 @@ class LibraryScreen(Screen):
 
         nav4 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
         for text, target in (
-            ("ELŐZMÉNY", "history"),
-            ("STAT", "stats"),
-            ("SMART", "smart"),
+            (T("history"), "history"),
+            (T("stats"), "stats"),
+            (T("smart"), "smart"),
         ):
             b = Button(
                 text=text,
@@ -1127,7 +1328,7 @@ class LibraryScreen(Screen):
         root.add_widget(nav4)
 
         self.search = TextInput(
-            hint_text="Keresés a zenék között…",
+            hint_text=T("search_hint"),
             multiline=False,
             size_hint_y=None,
             height=dp(46),
@@ -1173,7 +1374,7 @@ class LibraryScreen(Screen):
                 visible.append(path)
 
         self.status.text = (
-            f"{len(visible)} dal • {app.backend_name}"
+            f"{len(visible)} {T("tracks_found")} • {app.backend_name}"
             if app.songs
             else "Nem találtam zenét a beállított zene mappákban."
         )
@@ -1340,14 +1541,14 @@ class BaseFeature(Screen):
     def make(self,title):
         self.add_widget(Image(source="party_bg.png",allow_stretch=True,keep_ratio=False)); self.add_widget(DarkOverlay(.68))
         root=BoxLayout(orientation="vertical",padding=dp(18),spacing=dp(12)); top=BoxLayout(size_hint_y=None,height=dp(54))
-        back=Button(text="VISSZA",size_hint_x=None,width=dp(88),background_normal="",background_color=PANEL_2,color=TEXT,bold=True); back.bind(on_release=lambda *_:App.get_running_app().show_library())
+        back=Button(text=T("back"),size_hint_x=None,width=dp(88),background_normal="",background_color=PANEL_2,color=TEXT,bold=True); back.bind(on_release=lambda *_:App.get_running_app().show_library())
         lab=Label(text=f"[b]{title}[/b]",markup=True,color=TEXT,font_size="23sp",halign="left",valign="middle"); lab.bind(size=lambda i,v:setattr(i,"text_size",(i.width,i.height))); self.title_label=lab; top.add_widget(back); top.add_widget(lab); root.add_widget(top); self.add_widget(root); return root
 
 
 class ArtistsScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("ELŐADÓK")
+        root = self.make(T("artists"))
         self.scroll = ScrollView(do_scroll_x=False)
         self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
         self.box.bind(minimum_height=self.box.setter("height"))
@@ -1410,7 +1611,7 @@ class ArtistTracksScreen(BaseFeature):
 class AlbumsScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("ALBUMOK")
+        root = self.make(T("albums"))
         self.scroll = ScrollView(do_scroll_x=False)
         self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
         self.box.bind(minimum_height=self.box.setter("height"))
@@ -1510,7 +1711,7 @@ class AlbumTracksScreen(BaseFeature):
 class FavoritesScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("KEDVENCEK")
+        root = self.make(T("favorites"))
         self.scroll = ScrollView(do_scroll_x=False)
         self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
         self.box.bind(minimum_height=self.box.setter("height"))
@@ -1543,7 +1744,7 @@ class ConnectScreen(BaseFeature):
     """Android Bluetooth / Connect nézet, a PC-s Connect mobil megfelelője."""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("CONNECT")
+        root = self.make(T("connect"))
 
         current = GlassPanel(
             orientation="vertical",
@@ -1677,7 +1878,7 @@ class FoldersScreen(BaseFeature):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("ZENE MAPPÁK")
+        root = self.make(T("music_folders"))
 
         info = Label(
             text=(
@@ -1692,7 +1893,7 @@ class FoldersScreen(BaseFeature):
         root.add_widget(info)
 
         picker = Button(
-            text="MAPPA KIVÁLASZTÁSA",
+            text=T("choose_folder"),
             size_hint_y=None,
             height=dp(54),
             background_normal="",
@@ -1843,7 +2044,7 @@ class FoldersScreen(BaseFeature):
 class PlaylistsScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("PLAYLISTEK")
+        root = self.make(T("playlists"))
 
         row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
         self.name_input = TextInput(
@@ -2057,7 +2258,7 @@ class PlaylistTracksScreen(BaseFeature):
 class NowPlayingScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("MOST SZÓL")
+        root = self.make(T("now_playing"))
 
         self.cover = Image(
             source="icon.png",
@@ -2155,7 +2356,7 @@ class NowPlayingScreen(BaseFeature):
 class HistoryScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root = self.make("NEMRÉG HALLGATOTT")
+        root = self.make(T("recent"))
         self.scroll = ScrollView(do_scroll_x=False)
         self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
         self.box.bind(minimum_height=self.box.setter("height"))
@@ -2176,7 +2377,7 @@ class HistoryScreen(BaseFeature):
 class StatsScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root=self.make("STATISZTIKÁK")
+        root=self.make(T("statistics"))
         self.summary=Label(text="", color=TEXT, font_size="18sp", halign="center", valign="middle")
         self.summary.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20), None)))
         root.add_widget(self.summary)
@@ -2203,7 +2404,7 @@ class StatsScreen(BaseFeature):
 class SmartScreen(BaseFeature):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        root=self.make("SMART LISTÁK")
+        root=self.make(T("smart_lists"))
         tabs=BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(5))
         for text,mode in (("TOP","top"),("FRISS","new"),("RECENT","recent"),("KEDVENC","fav")):
             b=Button(text=text, background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True, font_size="10sp")
@@ -2234,6 +2435,292 @@ class SmartScreen(BaseFeature):
             self.box.add_widget(Label(text="Ehhez a Smart listához még nincs adat.",color=TEXT_2,size_hint_y=None,height=dp(110)))
             return
         for p in unique[:100]:self.box.add_widget(make_song_row(p, lambda:self.show_mode(mode)))
+
+
+class FirstSetupScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_widget(Image(source="party_bg.png", allow_stretch=True, keep_ratio=False))
+        self.add_widget(DarkOverlay(.70))
+
+        root = BoxLayout(
+            orientation="vertical",
+            padding=[dp(22), dp(36), dp(22), dp(26)],
+            spacing=dp(14)
+        )
+
+        title = Label(
+            text="[b][color=63D2FF]JustMusic![/color][/b]",
+            markup=True,
+            font_size="36sp",
+            size_hint_y=None,
+            height=dp(70)
+        )
+        root.add_widget(title)
+
+        self.welcome = Label(
+            text=T("welcome"),
+            color=TEXT,
+            font_size="25sp",
+            bold=True,
+            size_hint_y=None,
+            height=dp(55)
+        )
+        root.add_widget(self.welcome)
+
+        self.subtitle = Label(
+            text=T("welcome_sub"),
+            color=TEXT_2,
+            font_size="15sp",
+            size_hint_y=None,
+            height=dp(46)
+        )
+        root.add_widget(self.subtitle)
+
+        auto_lang, auto_region = detect_system_locale()
+        app = App.get_running_app()
+        self.selected_language = getattr(app, "language", None) or auto_lang
+        self.selected_region = getattr(app, "region", None) or auto_region
+
+        self.recommended = Label(
+            text=(
+                f"{T('recommended')}: "
+                f"{SUPPORTED_LANGUAGES.get(auto_lang, auto_lang)} • "
+                f"{SUPPORTED_REGIONS.get(auto_region, auto_region)}"
+            ),
+            color=ACCENT_2,
+            size_hint_y=None,
+            height=dp(36)
+        )
+        root.add_widget(self.recommended)
+
+        root.add_widget(Label(
+            text=T("language"), color=TEXT_2, bold=True,
+            size_hint_y=None, height=dp(28)
+        ))
+
+        lang_grid = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(116), spacing=dp(6))
+        row1 = BoxLayout(spacing=dp(6)); row2 = BoxLayout(spacing=dp(6))
+        lang_grid.add_widget(row1); lang_grid.add_widget(row2)
+        self.lang_buttons = {}
+        for idx, (code, label) in enumerate(SUPPORTED_LANGUAGES.items()):
+            b = Button(text=label, background_normal="", background_color=PANEL_2, color=TEXT, bold=True)
+            b.bind(on_release=lambda _, c=code: self.choose_language(c))
+            (row1 if idx < 3 else row2).add_widget(b)
+            self.lang_buttons[code] = b
+        root.add_widget(lang_grid)
+
+        root.add_widget(Label(
+            text=T("region"), color=TEXT_2, bold=True,
+            size_hint_y=None, height=dp(28)
+        ))
+
+        region_grid = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(116), spacing=dp(6))
+        rr1 = BoxLayout(spacing=dp(6)); rr2 = BoxLayout(spacing=dp(6))
+        region_grid.add_widget(rr1); region_grid.add_widget(rr2)
+        self.region_buttons = {}
+        for idx, (code, label) in enumerate(SUPPORTED_REGIONS.items()):
+            b = Button(text=label, background_normal="", background_color=PANEL_2, color=TEXT, bold=True, font_size="10sp")
+            b.bind(on_release=lambda _, c=code: self.choose_region(c))
+            (rr1 if idx < 3 else rr2).add_widget(b)
+            self.region_buttons[code] = b
+        root.add_widget(region_grid)
+
+        root.add_widget(Widget())
+        self.continue_button = Button(
+            text=T("continue"),
+            size_hint_y=None,
+            height=dp(58),
+            background_normal="",
+            background_color=ACCENT,
+            color=(0, .07, .12, 1),
+            bold=True,
+            font_size="16sp"
+        )
+        self.continue_button.bind(on_release=lambda *_: self.finish())
+        root.add_widget(self.continue_button)
+        self.add_widget(root)
+        self.refresh_selected()
+
+    def choose_language(self, language):
+        self.selected_language = language
+        # A setup képernyő szövege rögtön a választott nyelvre vált.
+        app = App.get_running_app()
+        app.language = language
+        self.welcome.text = T("welcome")
+        self.subtitle.text = T("welcome_sub")
+        self.continue_button.text = T("continue")
+        self.refresh_selected()
+
+    def choose_region(self, region):
+        self.selected_region = region
+        self.refresh_selected()
+
+    def refresh_selected(self):
+        for code, button in self.lang_buttons.items():
+            button.background_color = ACCENT if code == self.selected_language else PANEL_2
+            button.color = (0, .07, .12, 1) if code == self.selected_language else TEXT
+        for code, button in self.region_buttons.items():
+            button.background_color = ACCENT if code == self.selected_region else PANEL_2
+            button.color = (0, .07, .12, 1) if code == self.selected_region else TEXT
+
+    def finish(self):
+        App.get_running_app().complete_first_setup(
+            self.selected_language,
+            self.selected_region
+        )
+
+
+class SettingsScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("settings"))
+
+        self.locale_info = Label(
+            text="",
+            color=ACCENT_2,
+            size_hint_y=None,
+            height=dp(44),
+            bold=True
+        )
+        root.add_widget(self.locale_info)
+
+        language_btn = Button(
+            text=T("language_region"),
+            size_hint_y=None, height=dp(52),
+            background_normal="", background_color=ACCENT,
+            color=(0, .07, .12, 1), bold=True
+        )
+        language_btn.bind(on_release=lambda *_: App.get_running_app().open_screen("language_region"))
+        root.add_widget(language_btn)
+
+        for title_key, buttons in (
+            ("audio", (("MIX", "mix"), ("EQ", "eq"), ("RG", "rg"), (T("sleep"), "sleep"))),
+            ("library", ((T("folders"), "folders"), (T("playlists"), "playlists"), (T("queue"), "queue"))),
+            ("connect", ((T("connect"), "connect"),)),
+        ):
+            root.add_widget(Label(
+                text=T(title_key), color=TEXT_2, bold=True,
+                size_hint_y=None, height=dp(28), halign="left"
+            ))
+            row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+            for label, target in buttons:
+                b = Button(text=label, background_normal="", background_color=PANEL_2, color=TEXT, bold=True, font_size="10sp")
+                b.bind(on_release=lambda _, t=target: App.get_running_app().open_screen(t))
+                row.add_widget(b)
+            root.add_widget(row)
+
+        appearance = Button(
+            text=T("appearance"), size_hint_y=None, height=dp(48),
+            background_normal="", background_color=PANEL_2, color=TEXT
+        )
+        appearance.bind(on_release=lambda *_: App.get_running_app().open_screen("appearance"))
+        root.add_widget(appearance)
+
+        saving = Button(
+            text=T("saving"), size_hint_y=None, height=dp(48),
+            background_normal="", background_color=PANEL_2, color=TEXT
+        )
+        saving.bind(on_release=lambda *_: App.get_running_app().open_screen("saving"))
+        root.add_widget(saving)
+
+        about = Button(
+            text=T("about"), size_hint_y=None, height=dp(48),
+            background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True
+        )
+        about.bind(on_release=lambda *_: App.get_running_app().open_screen("about"))
+        root.add_widget(about)
+
+    def on_pre_enter(self, *_):
+        app = App.get_running_app()
+        self.title_label.text = f"[b]{T('settings')}[/b]"
+        self.locale_info.text = (
+            f"{T('language')}: {SUPPORTED_LANGUAGES.get(app.language, app.language)}   •   "
+            f"{T('region')}: {SUPPORTED_REGIONS.get(app.region, app.region)}"
+        )
+
+
+class LanguageRegionScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("language_region"))
+        self.info = Label(text=T("restart_note"), color=TEXT_2, size_hint_y=None, height=dp(40))
+        root.add_widget(self.info)
+
+        root.add_widget(Label(text=T("language"), color=ACCENT_2, bold=True, size_hint_y=None, height=dp(30)))
+        self.lang_box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(222), spacing=dp(5))
+        for code, label in SUPPORTED_LANGUAGES.items():
+            b = Button(text=label, background_normal="", background_color=PANEL_2, color=TEXT, bold=True)
+            b.bind(on_release=lambda _, c=code: self.set_language(c))
+            self.lang_box.add_widget(b)
+        root.add_widget(self.lang_box)
+
+        root.add_widget(Label(text=T("region"), color=ACCENT_2, bold=True, size_hint_y=None, height=dp(30)))
+        region_scroll = ScrollView(do_scroll_x=False)
+        self.region_box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(5))
+        self.region_box.bind(minimum_height=self.region_box.setter("height"))
+        for code, label in SUPPORTED_REGIONS.items():
+            b = Button(text=label, size_hint_y=None, height=dp(48), background_normal="", background_color=PANEL_2, color=TEXT)
+            b.bind(on_release=lambda _, c=code: self.set_region(c))
+            self.region_box.add_widget(b)
+        region_scroll.add_widget(self.region_box)
+        root.add_widget(region_scroll)
+
+    def set_language(self, language):
+        App.get_running_app().change_language(language)
+
+    def set_region(self, region):
+        app = App.get_running_app()
+        app.region = region
+        app.save_settings()
+        app.rebuild_ui("language_region")
+
+
+class AppearanceScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("appearance"))
+        root.add_widget(Label(
+            text=T("appearance_info"), color=ACCENT_2,
+            font_size="20sp", bold=True, halign="center"
+        ))
+        root.add_widget(Label(
+            text="Neon Glass\nParty Background\nCyan Accent",
+            color=TEXT_2, font_size="16sp", halign="center"
+        ))
+
+
+class SavingScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("saving"))
+        root.add_widget(Label(
+            text=f"{T('auto_save')}: {T('enabled')}",
+            color=ACCENT_2, font_size="24sp", bold=True
+        ))
+        root.add_widget(Label(
+            text=T("save_info"), color=TEXT_2,
+            halign="center", text_size=(Window.width - dp(70), None)
+        ))
+
+
+class AboutScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("about"))
+        root.add_widget(Label(
+            text="[b][color=63D2FF]JustMusic! Mobile[/color][/b]",
+            markup=True, color=TEXT, font_size="28sp"
+        ))
+        root.add_widget(Label(
+            text=f"{T('version')}: 1.7.0",
+            color=ACCENT_2, font_size="18sp", bold=True
+        ))
+        root.add_widget(MadeInHungaryBanner())
+        root.add_widget(Label(
+            text="Your music. Your style.",
+            color=TEXT_2, font_size="16sp"
+        ))
 
 
 class MixScreen(BaseFeature):
@@ -2501,7 +2988,7 @@ class MixScreen(BaseFeature):
 
 class EQScreen(BaseFeature):
     def __init__(self,**kwargs):
-        super().__init__(**kwargs); r=self.make("5-SÁVOS EQ"); self.sliders=[]
+        super().__init__(**kwargs); r=self.make(T("equalizer")); self.sliders=[]
         for idx,name in enumerate(("BASS","LOW MID","MID","HIGH MID","TREBLE")):
             row=BoxLayout(size_hint_y=None,height=dp(55),spacing=dp(6)); lab=Label(text=name,color=TEXT_2,size_hint_x=None,width=dp(82)); s=Slider(min=-12,max=12,step=1,value=0); out=Label(text="0 dB",color=ACCENT_2,size_hint_x=None,width=dp(60)); s.bind(value=lambda _,v,i=idx,o=out:self.changed(i,v,o)); row.add_widget(lab); row.add_widget(s); row.add_widget(out); r.add_widget(row); self.sliders.append(s)
         p=BoxLayout(size_hint_y=None,height=dp(46),spacing=dp(5))
@@ -2518,7 +3005,7 @@ class EQScreen(BaseFeature):
 
 class RGScreen(BaseFeature):
     def __init__(self,**kwargs):
-        super().__init__(**kwargs); r=self.make("REPLAYGAIN"); r.add_widget(Label(text="Track gain metaadat alapján hangerő-kiegyenlítés.",color=TEXT_2)); self.status=Label(text="",color=ACCENT_2,font_size="25sp"); r.add_widget(self.status)
+        super().__init__(**kwargs); r=self.make(T("replaygain")); r.add_widget(Label(text="Track gain metaadat alapján hangerő-kiegyenlítés.",color=TEXT_2)); self.status=Label(text="",color=ACCENT_2,font_size="25sp"); r.add_widget(self.status)
         b=Button(text="REPLAYGAIN BE / KI",size_hint_y=None,height=dp(56),background_normal="",background_color=ACCENT,color=(0,.07,.12,1),bold=True); b.bind(on_release=lambda *_:self.toggle()); r.add_widget(b)
     def on_pre_enter(self,*_): self.refresh()
     def refresh(self): self.status.text="BEKAPCSOLVA" if App.get_running_app().replaygain_enabled else "KIKAPCSOLVA"
@@ -2528,7 +3015,7 @@ class RGScreen(BaseFeature):
 
 class QueueScreen(BaseFeature):
     def __init__(self,**kwargs):
-        super().__init__(**kwargs); r=self.make("LEJÁTSZÁSI SOR"); sc=ScrollView(do_scroll_x=False); self.box=BoxLayout(orientation="vertical",size_hint_y=None,spacing=dp(6)); self.box.bind(minimum_height=self.box.setter("height")); sc.add_widget(self.box); r.add_widget(sc)
+        super().__init__(**kwargs); r=self.make(T("queue")); sc=ScrollView(do_scroll_x=False); self.box=BoxLayout(orientation="vertical",size_hint_y=None,spacing=dp(6)); self.box.bind(minimum_height=self.box.setter("height")); sc.add_widget(self.box); r.add_widget(sc)
     def on_pre_enter(self,*_):
         a=App.get_running_app(); self.box.clear_widgets()
         for p in a.queue_snapshot():
@@ -2537,7 +3024,7 @@ class QueueScreen(BaseFeature):
 
 class SleepScreen(BaseFeature):
     def __init__(self,**kwargs):
-        super().__init__(**kwargs); r=self.make("SLEEP TIMER"); self.status=Label(text="Kikapcsolva",color=ACCENT_2,font_size="24sp"); r.add_widget(self.status); row=BoxLayout(size_hint_y=None,height=dp(56),spacing=dp(5))
+        super().__init__(**kwargs); r=self.make(T("sleep")); self.status=Label(text="Kikapcsolva",color=ACCENT_2,font_size="24sp"); r.add_widget(self.status); row=BoxLayout(size_hint_y=None,height=dp(56),spacing=dp(5))
         for m in (15,30,45,60):
             b=Button(text=f"{m}p",background_normal="",background_color=PANEL_2,color=TEXT,bold=True); b.bind(on_release=lambda _,x=m:self.set_timer(x)); row.add_widget(b)
         r.add_widget(row); off=Button(text="KIKAPCSOLÁS",size_hint_y=None,height=dp(52),background_normal="",background_color=(.18,.08,.10,1),color=TEXT,bold=True); off.bind(on_release=lambda *_:self.set_timer(0)); r.add_widget(off)
@@ -2550,7 +3037,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.6"
+        self.title="JustMusic! Mobile v1.7"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -2564,6 +3051,10 @@ class JustMusicApp(App):
         self.listen_seconds={}
         self._listen_stat_tick=time.time()
         self._folder_request_code=7616
+        auto_lang, auto_region = detect_system_locale()
+        self.language=auto_lang
+        self.region=auto_region
+        self.setup_complete=False
         self.audio=NativeAudio(); self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
         self.shuffle_enabled=False; self.repeat_mode="off"
         # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
@@ -2580,7 +3071,16 @@ class JustMusicApp(App):
         self.mix_target_rg_db=0.0
         self.eq_values=[0,0,0,0,0]; self.replaygain_enabled=True; self.user_volume=.92; self.current_rg_db=0.0; self.sleep_deadline=None; self.paused_position=0.0
         self.load_settings()
-        self.manager=ScreenManager(); self.library=LibraryScreen(name="library"); self.lyrics_screen=LyricsScreen(name="lyrics")
+        self.manager=ScreenManager()
+        self.create_screens()
+        self.manager.current = "library" if self.setup_complete else "setup"
+        Clock.schedule_interval(self.tick,.10); Clock.schedule_once(lambda *_:self.permissions(),.4); Clock.schedule_once(lambda *_:self.scan(),1.2)
+        return self.manager
+
+    def create_screens(self):
+        self.manager.clear_widgets()
+        self.setup_screen=FirstSetupScreen(name="setup")
+        self.library=LibraryScreen(name="library"); self.lyrics_screen=LyricsScreen(name="lyrics")
         self.artists_screen=ArtistsScreen(name="artists")
         self.artist_tracks_screen=ArtistTracksScreen(name="artist_tracks")
         self.albums_screen=AlbumsScreen(name="albums")
@@ -2594,21 +3094,54 @@ class JustMusicApp(App):
         self.history_screen=HistoryScreen(name="history")
         self.stats_screen=StatsScreen(name="stats")
         self.smart_screen=SmartScreen(name="smart")
+        self.settings_screen=SettingsScreen(name="settings")
+        self.language_region_screen=LanguageRegionScreen(name="language_region")
+        self.appearance_screen=AppearanceScreen(name="appearance")
+        self.saving_screen=SavingScreen(name="saving")
+        self.about_screen=AboutScreen(name="about")
         for s in (
-            self.library, self.lyrics_screen,
+            self.setup_screen, self.library, self.lyrics_screen,
             self.artists_screen, self.artist_tracks_screen,
             self.albums_screen, self.album_tracks_screen,
             self.favorites_screen, self.connect_screen,
             self.folders_screen, self.playlists_screen, self.playlist_tracks_screen,
             self.now_playing_screen, self.history_screen, self.stats_screen, self.smart_screen,
+            self.settings_screen, self.language_region_screen, self.appearance_screen,
+            self.saving_screen, self.about_screen,
             MixScreen(name="mix"), EQScreen(name="eq"), RGScreen(name="rg"),
             QueueScreen(name="queue"), SleepScreen(name="sleep")
         ):
             self.manager.add_widget(s)
         self.library.player.set_shuffle(self.shuffle_enabled); self.library.player.set_repeat(self.repeat_mode)
         self.library.player.set_mix_status(self.crossfade_enabled,self.mix_gapless_enabled,self.mix_fade_out_seconds,self.mix_fade_in_seconds)
-        Clock.schedule_interval(self.tick,.10); Clock.schedule_once(lambda *_:self.permissions(),.4); Clock.schedule_once(lambda *_:self.scan(),1.2)
-        return self.manager
+
+    def rebuild_ui(self, target="settings"):
+        # A lejátszás nem áll le, csak a Kivy képernyőket építjük újra.
+        current_path = self.current_path
+        self.create_screens()
+        self.manager.current = target if self.setup_complete else "setup"
+        if current_path:
+            title=clean_title(current_path)
+            self.library.player.title.text=f"[b]{title}[/b]"
+            self.library.player.set_playing(self.audio.is_playing())
+            try:self.lyrics_screen.track.text=f"[b]JustMusic! • {T('lyrics')}[/b]\n{title}"
+            except Exception:pass
+
+    def change_language(self, language):
+        if language not in SUPPORTED_LANGUAGES:
+            return
+        self.language=language
+        self.save_settings()
+        self.rebuild_ui("language_region")
+
+    def complete_first_setup(self, language, region):
+        if language in SUPPORTED_LANGUAGES:
+            self.language=language
+        if region in SUPPORTED_REGIONS:
+            self.region=region
+        self.setup_complete=True
+        self.save_settings()
+        self.rebuild_ui("library")
 
     def settings_path(self):
         # Az app saját írható tárhelye: frissítéskor megmarad.
@@ -2637,6 +3170,11 @@ class JustMusicApp(App):
                     pass
 
             d=json.loads(p.read_text(encoding="utf-8")); self.shuffle_enabled=bool(d.get("shuffle",False)); self.repeat_mode=d.get("repeat","off")
+            self.language=str(d.get("language", self.language) or self.language)
+            if self.language not in SUPPORTED_LANGUAGES:self.language="en"
+            self.region=str(d.get("region", self.region) or self.region).upper()
+            if self.region not in SUPPORTED_REGIONS:self.region="HU" if self.language=="hu" else "GB"
+            self.setup_complete=bool(d.get("setup_complete", False))
             mix=d.get("mixer",{})
             self.crossfade_enabled=bool(mix.get("crossfade_enabled", d.get("mix", 0) not in (0, None)))
             legacy=float(d.get("mix",3.0) or 3.0)
@@ -2669,6 +3207,9 @@ class JustMusicApp(App):
     def save_settings(self):
         try:
             p=self.settings_path(); p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps({
+                "language":self.language,
+                "region":self.region,
+                "setup_complete":self.setup_complete,
                 "shuffle":self.shuffle_enabled,
                 "repeat":self.repeat_mode,
                 "mixer":{
@@ -3111,7 +3652,7 @@ class JustMusicApp(App):
         if not ok:self.library.status.text="Ezt a fájlt nem sikerült megnyitni.";return
         self.current_index=i;self.current_path=p;self.lyrics=parse_lrc(p);self.lyric_index=-1;self.lyrics_source="Helyi/cache LRC" if self.lyrics else "";self.current_rg_db=replaygain_db(p)
         self.record_play(p)
-        title=clean_title(p);self.library.player.title.text=f"[b]{title}[/b]";self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
+        title=clean_title(p);self.library.player.title.text=f"[b]{title}[/b]";self.lyrics_screen.track.text=f"[b]JustMusic! • {T('lyrics')}[/b]\n{title}"
         try:self.lyrics_screen.rebuild_lyrics()
         except Exception:pass
         try:self.connect_screen.now.text=title
@@ -3367,7 +3908,7 @@ class JustMusicApp(App):
                 self.apply_volume()
                 title=clean_title(self.current_path)
                 self.library.player.title.text=f"[b]{title}[/b]"
-                self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
+                self.lyrics_screen.track.text=f"[b]JustMusic! • {T('lyrics')}[/b]\n{title}"
                 try:self.lyrics_screen.rebuild_lyrics()
                 except Exception:pass
                 if not self.lyrics:
