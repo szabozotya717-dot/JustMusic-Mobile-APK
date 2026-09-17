@@ -1087,6 +1087,7 @@ class LibraryScreen(Screen):
         for text, target in (
             ("MAPPÁK", "folders"),
             ("PLAYLISTEK", "playlists"),
+            ("MOST SZÓL", "now_playing"),
         ):
             b = Button(
                 text=text,
@@ -1094,7 +1095,7 @@ class LibraryScreen(Screen):
                 background_color=PANEL_2,
                 color=ACCENT_2,
                 bold=True,
-                font_size="10sp"
+                font_size="9sp"
             )
             b.bind(
                 on_release=lambda _, t=target:
@@ -1103,6 +1104,27 @@ class LibraryScreen(Screen):
             nav3.add_widget(b)
 
         root.add_widget(nav3)
+
+        nav4 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
+        for text, target in (
+            ("ELŐZMÉNY", "history"),
+            ("STAT", "stats"),
+            ("SMART", "smart"),
+        ):
+            b = Button(
+                text=text,
+                background_normal="",
+                background_color=(.025, .085, .145, .96),
+                color=TEXT_2,
+                bold=True,
+                font_size="9sp"
+            )
+            b.bind(
+                on_release=lambda _, t=target:
+                    App.get_running_app().open_screen(t)
+            )
+            nav4.add_widget(b)
+        root.add_widget(nav4)
 
         self.search = TextInput(
             hint_text="Keresés a zenék között…",
@@ -1564,6 +1586,23 @@ class ConnectScreen(BaseFeature):
         controls.add_widget(settings)
         root.add_widget(controls)
 
+        self.output_info = Label(
+            text="Elérhető audio kimenetek",
+            color=ACCENT_2,
+            size_hint_y=None,
+            height=dp(30),
+            halign="left"
+        )
+        root.add_widget(self.output_info)
+
+        self.output_box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(70),
+            spacing=dp(3)
+        )
+        root.add_widget(self.output_box)
+
         self.info = Label(
             text="Párosított Bluetooth-eszközök",
             color=MUTED,
@@ -1587,6 +1626,20 @@ class ConnectScreen(BaseFeature):
     def refresh_devices(self):
         app = App.get_running_app()
         self.box.clear_widgets()
+        outputs = app.audio_output_devices()
+        self.output_box.clear_widgets()
+        if outputs:
+            text="  •  ".join(name for name,_ in outputs[:4])
+        else:
+            text="A rendszer nem adott vissza audio kimenetet."
+        self.output_box.add_widget(Label(
+            text=text,
+            color=TEXT_2,
+            halign="left",
+            valign="middle",
+            text_size=(Window.width-dp(60), None)
+        ))
+
         devices = app.bluetooth_devices()
 
         if not devices:
@@ -1628,8 +1681,8 @@ class FoldersScreen(BaseFeature):
 
         info = Label(
             text=(
-                "A JustMusic! ezeket a mappákat vizsgálja.\\n"
-                "Adj hozzá saját mappát teljes elérési úttal."
+                "A JustMusic! ezeket a mappákat vizsgálja.\n"
+                "Androidon a MAPPA KIVÁLASZTÁSA gomb a legegyszerűbb."
             ),
             color=TEXT_2,
             size_hint_y=None,
@@ -1637,6 +1690,34 @@ class FoldersScreen(BaseFeature):
             halign="center"
         )
         root.add_widget(info)
+
+        picker = Button(
+            text="MAPPA KIVÁLASZTÁSA",
+            size_hint_y=None,
+            height=dp(54),
+            background_normal="",
+            background_color=ACCENT,
+            color=(0, .07, .12, 1),
+            bold=True
+        )
+        picker.bind(
+            on_release=lambda *_:
+                App.get_running_app().pick_music_folder()
+        )
+        root.add_widget(picker)
+
+        self.picker_status = Label(
+            text="Vagy add meg kézzel a teljes elérési utat:",
+            color=MUTED,
+            size_hint_y=None,
+            height=dp(32),
+            halign="left",
+            valign="middle"
+        )
+        self.picker_status.bind(
+            size=lambda i, v: setattr(i, "text_size", (i.width, i.height))
+        )
+        root.add_widget(self.picker_status)
 
         self.path_input = TextInput(
             hint_text="/storage/emulated/0/SajatZene",
@@ -1972,6 +2053,189 @@ class PlaylistTracksScreen(BaseFeature):
 
 
 
+
+class NowPlayingScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("MOST SZÓL")
+
+        self.cover = Image(
+            source="icon.png",
+            size_hint_y=None,
+            height=dp(300),
+            allow_stretch=True,
+            keep_ratio=True
+        )
+        root.add_widget(self.cover)
+
+        self.title = Label(
+            text="Nincs lejátszás",
+            color=TEXT,
+            bold=True,
+            font_size="23sp",
+            size_hint_y=None,
+            height=dp(72),
+            halign="center",
+            valign="middle"
+        )
+        self.title.bind(size=lambda i,v:setattr(i,"text_size",(i.width, i.height)))
+        root.add_widget(self.title)
+
+        self.meta = Label(
+            text="",
+            color=TEXT_2,
+            size_hint_y=None,
+            height=dp(58),
+            halign="center",
+            valign="middle"
+        )
+        self.meta.bind(size=lambda i,v:setattr(i,"text_size",(i.width, i.height)))
+        root.add_widget(self.meta)
+
+        self.progress = Label(
+            text="0:00 / 0:00",
+            color=ACCENT_2,
+            bold=True,
+            size_hint_y=None,
+            height=dp(34)
+        )
+        root.add_widget(self.progress)
+
+        actions = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(6))
+        for text, callback in (
+            ("PREV", lambda: App.get_running_app().previous()),
+            ("PLAY/PAUSE", lambda: App.get_running_app().toggle_play()),
+            ("NEXT", lambda: App.get_running_app().next_pressed()),
+        ):
+            b = Button(
+                text=text,
+                background_normal="",
+                background_color=ACCENT if text == "PLAY/PAUSE" else PANEL_2,
+                color=(0,.07,.12,1) if text == "PLAY/PAUSE" else TEXT,
+                bold=True,
+                font_size="10sp"
+            )
+            b.bind(on_release=lambda _, cb=callback: cb())
+            actions.add_widget(b)
+        root.add_widget(actions)
+
+        row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+        fav = Button(text="KEDVENC", background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True)
+        lyrics = Button(text="DALSZÖVEG", background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True)
+        fav.bind(on_release=lambda *_: self.toggle_favorite())
+        lyrics.bind(on_release=lambda *_: App.get_running_app().open_lyrics())
+        row.add_widget(fav); row.add_widget(lyrics); root.add_widget(row)
+
+    def on_pre_enter(self, *_):
+        self.refresh()
+
+    def refresh(self):
+        app = App.get_running_app()
+        if not app.current_path:
+            self.cover.source = "icon.png"
+            self.title.text = "Nincs lejátszás"
+            self.meta.text = ""
+            self.progress.text = "0:00 / 0:00"
+            return
+        info = track_metadata(app.current_path)
+        cover = cover_for_track(app.current_path)
+        self.cover.source = cover or "icon.png"
+        try:self.cover.reload()
+        except Exception:pass
+        self.title.text = info["title"]
+        self.meta.text = f'{info["artist"]}\n{info["album"]}'
+        self.progress.text = f'{fmt_time(app.audio.position())} / {fmt_time(app.audio.duration())}'
+
+    def toggle_favorite(self):
+        app = App.get_running_app()
+        if app.current_path:
+            app.toggle_favorite(app.current_path)
+
+
+class HistoryScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("NEMRÉG HALLGATOTT")
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(7))
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box); root.add_widget(self.scroll)
+
+    def on_pre_enter(self,*_): self.refresh()
+
+    def refresh(self):
+        app=App.get_running_app(); self.box.clear_widgets()
+        paths=[p for p in app.history if p in app.songs]
+        if not paths:
+            self.box.add_widget(Label(text="Még nincs hallgatási előzmény.", color=TEXT_2, size_hint_y=None, height=dp(110)))
+            return
+        for p in paths[:100]:
+            self.box.add_widget(make_song_row(p, self.refresh))
+
+
+class StatsScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root=self.make("STATISZTIKÁK")
+        self.summary=Label(text="", color=TEXT, font_size="18sp", halign="center", valign="middle")
+        self.summary.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20), None)))
+        root.add_widget(self.summary)
+        self.top=Label(text="", color=TEXT_2, font_size="14sp", halign="left", valign="top")
+        self.top.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20), None)))
+        root.add_widget(self.top)
+
+    def on_pre_enter(self,*_): self.refresh()
+
+    def refresh(self):
+        app=App.get_running_app()
+        plays=sum(int(v or 0) for v in app.play_counts.values())
+        seconds=sum(float(v or 0) for v in app.listen_seconds.values())
+        h=int(seconds//3600); m=int((seconds%3600)//60)
+        self.summary.text=f"Összes lejátszás: {plays}\nHallgatási idő: {h} óra {m} perc\nKedvencek: {len(app.favorites)}"
+        ranked=sorted(app.play_counts.items(), key=lambda kv: kv[1], reverse=True)
+        lines=["LEGTÖBBET HALLGATOTT"]
+        for idx,(path,count) in enumerate(ranked[:8],1):
+            lines.append(f"{idx}. {clean_title(path)} — {count}x")
+        if len(lines)==1: lines.append("Még nincs elég adat.")
+        self.top.text="\n".join(lines)
+
+
+class SmartScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root=self.make("SMART LISTÁK")
+        tabs=BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(5))
+        for text,mode in (("TOP","top"),("FRISS","new"),("RECENT","recent"),("KEDVENC","fav")):
+            b=Button(text=text, background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True, font_size="10sp")
+            b.bind(on_release=lambda _,m=mode:self.show_mode(m)); tabs.add_widget(b)
+        root.add_widget(tabs)
+        self.scroll=ScrollView(do_scroll_x=False)
+        self.box=BoxLayout(orientation="vertical",size_hint_y=None,spacing=dp(7));self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box);root.add_widget(self.scroll)
+        self.mode="top"
+
+    def on_pre_enter(self,*_): self.show_mode(self.mode)
+
+    def show_mode(self,mode):
+        self.mode=mode;app=App.get_running_app();self.box.clear_widgets()
+        if mode=="top":
+            paths=[p for p,_ in sorted(app.play_counts.items(),key=lambda kv:kv[1],reverse=True) if p in app.songs]
+        elif mode=="new":
+            paths=sorted(app.songs,key=lambda p: app.safe_mtime(p),reverse=True)
+        elif mode=="recent":
+            paths=[p for p in app.history if p in app.songs]
+        else:
+            paths=[p for p in app.songs if app.is_favorite(p)]
+        seen=set();unique=[]
+        for p in paths:
+            if p in seen:continue
+            seen.add(p);unique.append(p)
+        if not unique:
+            self.box.add_widget(Label(text="Ehhez a Smart listához még nincs adat.",color=TEXT_2,size_hint_y=None,height=dp(110)))
+            return
+        for p in unique[:100]:self.box.add_widget(make_song_row(p, lambda:self.show_mode(mode)))
+
+
 class MixScreen(BaseFeature):
     """A PC-s Advanced Mixer mobilos, funkcióazonos változata."""
 
@@ -2286,7 +2550,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.5"
+        self.title="JustMusic! Mobile v1.6"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -2295,6 +2559,11 @@ class JustMusicApp(App):
         self.last_save_tick=0.0
         self.restore_path=""
         self.restore_position=0.0
+        self.history=[]
+        self.play_counts={}
+        self.listen_seconds={}
+        self._listen_stat_tick=time.time()
+        self._folder_request_code=7616
         self.audio=NativeAudio(); self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
         self.shuffle_enabled=False; self.repeat_mode="off"
         # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
@@ -2321,12 +2590,17 @@ class JustMusicApp(App):
         self.folders_screen=FoldersScreen(name="folders")
         self.playlists_screen=PlaylistsScreen(name="playlists")
         self.playlist_tracks_screen=PlaylistTracksScreen(name="playlist_tracks")
+        self.now_playing_screen=NowPlayingScreen(name="now_playing")
+        self.history_screen=HistoryScreen(name="history")
+        self.stats_screen=StatsScreen(name="stats")
+        self.smart_screen=SmartScreen(name="smart")
         for s in (
             self.library, self.lyrics_screen,
             self.artists_screen, self.artist_tracks_screen,
             self.albums_screen, self.album_tracks_screen,
             self.favorites_screen, self.connect_screen,
             self.folders_screen, self.playlists_screen, self.playlist_tracks_screen,
+            self.now_playing_screen, self.history_screen, self.stats_screen, self.smart_screen,
             MixScreen(name="mix"), EQScreen(name="eq"), RGScreen(name="rg"),
             QueueScreen(name="queue"), SleepScreen(name="sleep")
         ):
@@ -2387,6 +2661,9 @@ class JustMusicApp(App):
             self.user_volume=float(d.get("volume", self.user_volume))
             self.restore_path=str(d.get("last_path", "") or "")
             self.restore_position=float(d.get("last_position", 0.0) or 0.0)
+            self.history=[str(p) for p in d.get("history", []) if str(p).strip()][:200]
+            self.play_counts={str(k):int(v or 0) for k,v in (d.get("play_counts", {}) or {}).items()}
+            self.listen_seconds={str(k):float(v or 0.0) for k,v in (d.get("listen_seconds", {}) or {}).items()}
             while len(self.eq_values)<5:self.eq_values.append(0)
         except Exception: pass
     def save_settings(self):
@@ -2414,7 +2691,10 @@ class JustMusicApp(App):
                     self.audio.position()
                     if self.current_path
                     else self.restore_position
-                )
+                ),
+                "history":self.history[:200],
+                "play_counts":self.play_counts,
+                "listen_seconds":self.listen_seconds
             },ensure_ascii=False, indent=2),encoding="utf-8")
         except Exception: pass
     def permissions(self):
@@ -2585,6 +2865,18 @@ class JustMusicApp(App):
             builder.setContentText(str(title or "Zenelejátszás"))
             builder.setOngoing(bool(playing))
             builder.setOnlyAlertOnce(True)
+            try:
+                Notification=autoclass("android.app.Notification")
+                builder.setCategory(Notification.CATEGORY_TRANSPORT)
+                builder.setVisibility(Notification.VISIBILITY_PUBLIC)
+            except Exception:pass
+            try:
+                cover=cover_for_track(self.current_path) if self.current_path else ""
+                if cover:
+                    BitmapFactory=autoclass("android.graphics.BitmapFactory")
+                    bmp=BitmapFactory.decodeFile(cover)
+                    if bmp:builder.setLargeIcon(bmp)
+            except Exception:pass
 
             manager.notify(420, builder.build())
 
@@ -2603,6 +2895,105 @@ class JustMusicApp(App):
             manager.cancel(420)
         except Exception:
             pass
+
+    def safe_mtime(self, path):
+        try:return os.path.getmtime(path)
+        except Exception:return 0.0
+
+    def record_play(self, path):
+        if not path:return
+        key=self.favorite_key(path)
+        self.play_counts[key]=int(self.play_counts.get(key,0))+1
+        self.history=[key]+[p for p in self.history if p!=key]
+        self.history=self.history[:200]
+        self._listen_stat_tick=time.time()
+        try:self.history_screen.refresh()
+        except Exception:pass
+        try:self.stats_screen.refresh()
+        except Exception:pass
+        self.save_settings()
+
+    def add_listen_time(self):
+        now=time.time();delta=max(0.0,min(2.0,now-self._listen_stat_tick));self._listen_stat_tick=now
+        if self.current_path and self.audio.is_playing():
+            key=self.favorite_key(self.current_path)
+            self.listen_seconds[key]=float(self.listen_seconds.get(key,0.0))+delta
+
+    def pick_music_folder(self):
+        """Android SAF mappaválasztó. Primary shared-storage mappát automatikusan útvonallá alakít."""
+        if platform!="android":
+            self.folders_screen.path_input.text=str(Path.home()/"Music")
+            self.folders_screen.picker_status.text="Asztali teszt: a Music mappát választottam."
+            return
+        try:
+            from android import activity
+            from jnius import autoclass
+            Intent=autoclass("android.content.Intent")
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            activity.bind(on_activity_result=self._on_folder_result)
+            intent=Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+            PythonActivity.mActivity.startActivityForResult(intent,self._folder_request_code)
+            self.folders_screen.picker_status.text="Válassz ki egy zene mappát az Android fájlkezelőben..."
+        except Exception as error:
+            print("MAPPA PICKER HIBA:",error)
+            self.folders_screen.picker_status.text="A mappaválasztó nem indult el. A kézi útvonal továbbra is használható."
+
+    def _on_folder_result(self, request_code, result_code, intent):
+        if request_code!=self._folder_request_code:return
+        try:
+            from android import activity
+            activity.unbind(on_activity_result=self._on_folder_result)
+        except Exception:pass
+        if intent is None:return
+        try:
+            from jnius import autoclass
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            DocumentsContract=autoclass("android.provider.DocumentsContract")
+            uri=intent.getData()
+            flags=intent.getFlags()
+            resolver=PythonActivity.mActivity.getContentResolver()
+            try:resolver.takePersistableUriPermission(uri, flags & 3)
+            except Exception:pass
+            doc_id=str(DocumentsContract.getTreeDocumentId(uri))
+            path=""
+            if doc_id.lower().startswith("primary:"):
+                rel=doc_id.split(":",1)[1].strip("/")
+                path="/storage/emulated/0" + (("/"+rel) if rel else "")
+            if path:
+                self.add_music_folder(path)
+                self.folders_screen.picker_status.text=f"Kiválasztva: {path}"
+                self.folders_screen.path_input.text=path
+                self.folders_screen.refresh()
+            else:
+                self.folders_screen.picker_status.text="A mappa kiválasztva, de ezt a tárhelyet még nem tudom közvetlen fájlútvonallá alakítani."
+        except Exception as error:
+            print("MAPPA RESULT HIBA:",error)
+            try:self.folders_screen.picker_status.text="Nem sikerült feldolgozni a kiválasztott mappát."
+            except Exception:pass
+
+    def audio_output_devices(self):
+        if platform!="android":return [("Teszt audio kimenet","DESKTOP")]
+        try:
+            from jnius import autoclass
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            Context=autoclass("android.content.Context")
+            AudioManager=autoclass("android.media.AudioManager")
+            manager=PythonActivity.mActivity.getSystemService(Context.AUDIO_SERVICE)
+            devices=manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            result=[]
+            for d in devices:
+                try:name=str(d.getProductName() or "Audio eszköz")
+                except Exception:name="Audio eszköz"
+                try:dtype=str(d.getType())
+                except Exception:dtype="?"
+                item=(name,dtype)
+                if item not in result:result.append(item)
+            return result
+        except Exception as error:
+            print("AUDIO OUTPUT LISTA HIBA:",error);return []
 
     def auto_fetch_lyrics(self, audio_path):
         """Ha nincs LRC, háttérben automatikusan keres és elmenti."""
@@ -2719,6 +3110,7 @@ class JustMusicApp(App):
         except Exception as e:self.library.status.text=f"Lejátszási hiba: {e}";return
         if not ok:self.library.status.text="Ezt a fájlt nem sikerült megnyitni.";return
         self.current_index=i;self.current_path=p;self.lyrics=parse_lrc(p);self.lyric_index=-1;self.lyrics_source="Helyi/cache LRC" if self.lyrics else "";self.current_rg_db=replaygain_db(p)
+        self.record_play(p)
         title=clean_title(p);self.library.player.title.text=f"[b]{title}[/b]";self.lyrics_screen.track.text=f"[b]JustMusic! • Dalszöveg[/b]\n{title}"
         try:self.lyrics_screen.rebuild_lyrics()
         except Exception:pass
@@ -2726,6 +3118,8 @@ class JustMusicApp(App):
         except Exception:pass
         self.audio.start();self.audio.apply_eq(self.eq_values);self.apply_volume();self.library.player.set_playing(True);self.refresh_lyrics(True)
         self.show_android_notification(title, True)
+        try:self.now_playing_screen.refresh()
+        except Exception:pass
         self.save_settings()
         if not self.lyrics:
             self.auto_fetch_lyrics(p)
@@ -2965,6 +3359,7 @@ class JustMusicApp(App):
             if self.audio.swap_to_next():
                 self.current_index=self.mix_target_index
                 self.current_path=self.songs[self.current_index]
+                self.record_play(self.current_path)
                 self.lyrics=parse_lrc(self.current_path)
                 self.lyric_index=-1
                 self.current_rg_db=self.mix_target_rg_db
@@ -3022,6 +3417,7 @@ class JustMusicApp(App):
 
     def tick(self,_):
         now = time.time()
+        self.add_listen_time()
 
         # Automatikus állapotmentés kb. 5 másodpercenként.
         if now - self.last_save_tick >= 5.0:
@@ -3033,6 +3429,10 @@ class JustMusicApp(App):
         pos=self.audio.position();length=self.audio.duration();p=self.library.player;p.elapsed.text=fmt_time(pos);p.total.text=fmt_time(length)
         if not p.slider.dragging:p.slider.max=max(1,length);p.slider.value=min(pos,max(1,length))
         self.lyrics_screen.time.text=f"{fmt_time(pos)} / {fmt_time(length)}";self.refresh_lyrics()
+        try:
+            if self.manager.current=="now_playing":
+                self.now_playing_screen.progress.text=f"{fmt_time(pos)} / {fmt_time(length)}"
+        except Exception:pass
         if self.audio.is_playing() and length>0:
             rem=max(0,length-pos)
             trigger=max(self.mix_fade_out_seconds,self.mix_fade_in_seconds)
