@@ -47,7 +47,7 @@ MUTED = (0.45, 0.56, 0.66, 1.0)
 SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.8.1"
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=20"
 MEDIA_ACTION_PREVIOUS = "hu.zs420ller.justmusic.action.PREVIOUS"
@@ -3370,10 +3370,9 @@ class JustMusicApp(App):
         self.manager.current = "library" if self.setup_complete else "setup"
         Clock.schedule_interval(self.tick,.10)
         Clock.schedule_once(lambda *_:self.permissions(),.4)
-        Clock.schedule_once(lambda *_:self.setup_android_media_controls(),.7)
         Clock.schedule_once(lambda *_:self.scan(),1.2)
         if self.setup_complete:
-            Clock.schedule_once(lambda *_:self.check_for_updates(silent=True),6.0)
+            Clock.schedule_once(lambda *_:self.check_for_updates(silent=True),10.0)
         return self.manager
 
     def create_screens(self):
@@ -3743,7 +3742,8 @@ class JustMusicApp(App):
                 self.audio.seek(self.paused_position)
 
             self.library.player.set_playing(False)
-            self.show_android_notification(title, False)
+            # Induláskor nem hozunk létre Android media notificationt.
+            # Ez csak valódi lejátszáskor aktiválódik.
 
         except Exception as error:
             print("UTOLSÓ DAL VISSZAÁLLÍTÁSI HIBA:", error)
@@ -3761,13 +3761,17 @@ class JustMusicApp(App):
 
     def setup_android_media_controls(self):
         if platform != "android" or self._media_intent_bound:
-            return
+            return False
         try:
             from android import activity
             activity.bind(on_new_intent=self.on_android_media_intent)
             self._media_intent_bound=True
-        except Exception as error:
+            return True
+        except BaseException as error:
+            # A media controls extra funkció; emiatt az app soha ne álljon le.
+            self._media_intent_bound=False
             print("MEDIA INTENT BIND HIBA:", error)
+            return False
 
     def on_android_media_intent(self, intent):
         try:
@@ -4236,6 +4240,12 @@ class JustMusicApp(App):
         try:self.connect_screen.now.text=title
         except Exception:pass
         self.audio.start();self.audio.apply_eq(self.eq_values);self.apply_volume();self.library.player.set_playing(True);self.refresh_lyrics(True)
+        # Safe startup: Android media intent handling is initialized lazily,
+        # only when the user actually starts playback.
+        try:
+            self.setup_android_media_controls()
+        except Exception as error:
+            print("MEDIA CONTROL INIT HIBA:", error)
         self.show_android_notification(title, True)
         try:self.now_playing_screen.refresh()
         except Exception:pass
