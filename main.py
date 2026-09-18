@@ -86,7 +86,7 @@ TRANSLATIONS = {
         "restart_note": "A nyelv azonnal frissül a felületen.",
         "save_info": "A JustMusic! automatikusan menti a beállításokat, kedvenceket, playlisteket és az utolsó lejátszási pozíciót.",
         "appearance_info": "Neon Glass / Party téma aktív.",
-        "tracks_found": "dal", "no_music": T("no_music"),
+        "tracks_found": "dal", "no_music": "Nem találtam zenét a beállított zene mappákban.",
     },
     "en": {
         "settings": "SETTINGS", "back": "BACK", "lyrics": "LYRICS",
@@ -2713,7 +2713,7 @@ class AboutScreen(BaseFeature):
             markup=True, color=TEXT, font_size="28sp"
         ))
         root.add_widget(Label(
-            text=f"{T('version')}: 1.7.0",
+            text=f"{T('version')}: 1.7.1",
             color=ACCENT_2, font_size="18sp", bold=True
         ))
         root.add_widget(MadeInHungaryBanner())
@@ -3037,7 +3037,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.7"
+        self.title="JustMusic! Mobile v1.7.1"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
