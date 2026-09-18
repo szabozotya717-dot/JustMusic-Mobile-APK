@@ -21,6 +21,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
@@ -45,6 +46,13 @@ TEXT_2 = (0.68, 0.77, 0.86, 1.0)
 MUTED = (0.45, 0.56, 0.66, 1.0)
 SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
+
+APP_VERSION = "1.8.0"
+GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
+GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=20"
+MEDIA_ACTION_PREVIOUS = "hu.zs420ller.justmusic.action.PREVIOUS"
+MEDIA_ACTION_TOGGLE = "hu.zs420ller.justmusic.action.TOGGLE"
+MEDIA_ACTION_NEXT = "hu.zs420ller.justmusic.action.NEXT"
 
 
 SUPPORTED_LANGUAGES = {
@@ -196,6 +204,67 @@ TRANSLATIONS = {
     },
 }
 
+
+
+EXTRA_TRANSLATIONS = {
+    "hu": {
+        "updates": "FRISSÍTÉSEK", "check_updates": "FRISSÍTÉSEK KERESÉSE",
+        "checking_updates": "Frissítés keresése…", "up_to_date": "A JustMusic! naprakész.",
+        "update_available": "Új JustMusic! verzió érhető el", "download_update": "LETÖLTÉS",
+        "later": "KÉSŐBB", "current_version": "Jelenlegi verzió",
+        "queue_empty": "A kézi lejátszási sor üres.", "clear_queue": "SOR TÖRLÉSE",
+        "add_queue": "Q+", "play_next": "NEXT", "manual_queue": "KÉZI SOR",
+        "auto_queue": "AUTOMATIKUS KÖVETKEZŐK", "add_current": "AKTUÁLIS +",
+    },
+    "en": {
+        "updates": "UPDATES", "check_updates": "CHECK FOR UPDATES",
+        "checking_updates": "Checking for updates…", "up_to_date": "JustMusic! is up to date.",
+        "update_available": "A new JustMusic! version is available", "download_update": "DOWNLOAD",
+        "later": "LATER", "current_version": "Current version",
+        "queue_empty": "The manual play queue is empty.", "clear_queue": "CLEAR QUEUE",
+        "add_queue": "Q+", "play_next": "NEXT", "manual_queue": "MANUAL QUEUE",
+        "auto_queue": "UP NEXT", "add_current": "CURRENT +",
+    },
+    "de": {
+        "updates": "UPDATES", "check_updates": "NACH UPDATES SUCHEN",
+        "checking_updates": "Suche nach Updates…", "up_to_date": "JustMusic! ist aktuell.",
+        "update_available": "Eine neue JustMusic!-Version ist verfügbar", "download_update": "DOWNLOAD",
+        "later": "SPÄTER", "current_version": "Aktuelle Version",
+        "queue_empty": "Die manuelle Warteschlange ist leer.", "clear_queue": "WARTESCHLANGE LEEREN",
+        "add_queue": "Q+", "play_next": "NEXT", "manual_queue": "MANUELLE WARTESCHLANGE",
+        "auto_queue": "ALS NÄCHSTES", "add_current": "AKTUELL +",
+    },
+    "es": {
+        "updates": "ACTUALIZACIONES", "check_updates": "BUSCAR ACTUALIZACIONES",
+        "checking_updates": "Buscando actualizaciones…", "up_to_date": "JustMusic! está actualizado.",
+        "update_available": "Hay una nueva versión de JustMusic!", "download_update": "DESCARGAR",
+        "later": "MÁS TARDE", "current_version": "Versión actual",
+        "queue_empty": "La cola manual está vacía.", "clear_queue": "VACIAR COLA",
+        "add_queue": "Q+", "play_next": "NEXT", "manual_queue": "COLA MANUAL",
+        "auto_queue": "A CONTINUACIÓN", "add_current": "ACTUAL +",
+    },
+    "fr": {
+        "updates": "MISES À JOUR", "check_updates": "RECHERCHER LES MISES À JOUR",
+        "checking_updates": "Recherche de mise à jour…", "up_to_date": "JustMusic! est à jour.",
+        "update_available": "Une nouvelle version de JustMusic! est disponible", "download_update": "TÉLÉCHARGER",
+        "later": "PLUS TARD", "current_version": "Version actuelle",
+        "queue_empty": "La file manuelle est vide.", "clear_queue": "VIDER LA FILE",
+        "add_queue": "Q+", "play_next": "NEXT", "manual_queue": "FILE MANUELLE",
+        "auto_queue": "À SUIVRE", "add_current": "ACTUEL +",
+    },
+    "it": {
+        "updates": "AGGIORNAMENTI", "check_updates": "CERCA AGGIORNAMENTI",
+        "checking_updates": "Ricerca aggiornamenti…", "up_to_date": "JustMusic! è aggiornato.",
+        "update_available": "È disponibile una nuova versione di JustMusic!", "download_update": "SCARICA",
+        "later": "DOPO", "current_version": "Versione attuale",
+        "queue_empty": "La coda manuale è vuota.", "clear_queue": "SVUOTA CODA",
+        "add_queue": "Q+", "play_next": "NEXT", "manual_queue": "CODA MANUALE",
+        "auto_queue": "PROSSIMI", "add_current": "ATTUALE +",
+    },
+}
+
+for _lang, _values in EXTRA_TRANSLATIONS.items():
+    TRANSLATIONS.setdefault(_lang, {}).update(_values)
 
 def T(key, default=None):
     try:
@@ -1162,14 +1231,14 @@ class MadeInHungaryBanner(GlassPanel):
 
 def make_song_row(path, refresh_callback=None):
     app = App.get_running_app()
-    row = BoxLayout(size_hint_y=None, height=dp(62), spacing=dp(6))
+    row = BoxLayout(size_hint_y=None, height=dp(62), spacing=dp(5))
 
     cover_path = cover_for_track(path)
     if cover_path:
         cover = Image(
             source=cover_path,
             size_hint_x=None,
-            width=dp(58),
+            width=dp(54),
             allow_stretch=True,
             keep_ratio=True
         )
@@ -1177,34 +1246,59 @@ def make_song_row(path, refresh_callback=None):
         cover = Label(
             text="♫",
             size_hint_x=None,
-            width=dp(58),
+            width=dp(54),
             color=ACCENT_2,
-            font_size="24sp"
+            font_size="23sp"
         )
-
     row.add_widget(cover)
 
-    title = clean_title(path)
     play = Button(
-        text=title,
+        text=clean_title(path),
         halign="left",
         valign="middle",
-        text_size=(Window.width - dp(130), None),
         background_normal="",
         background_color=CARD,
         color=TEXT,
-        font_size="15sp"
+        font_size="14sp"
     )
+    play.bind(size=lambda i, v: setattr(i, "text_size", (max(30, i.width-dp(10)), None)))
     play.bind(on_release=lambda *_: app.play_path(path))
+    row.add_widget(play)
 
-    fav = Button(
-        text="★" if app.is_favorite(path) else "☆",
+    play_next = Button(
+        text=T("play_next"),
         size_hint_x=None,
         width=dp(52),
         background_normal="",
         background_color=PANEL_2,
+        color=ACCENT_2,
+        bold=True,
+        font_size="9sp"
+    )
+    play_next.bind(on_release=lambda *_: app.add_play_next(path))
+    row.add_widget(play_next)
+
+    queue_add = Button(
+        text=T("add_queue"),
+        size_hint_x=None,
+        width=dp(42),
+        background_normal="",
+        background_color=PANEL_2,
+        color=ACCENT_2,
+        bold=True,
+        font_size="10sp"
+    )
+    queue_add.bind(on_release=lambda *_: app.add_to_queue(path))
+    row.add_widget(queue_add)
+
+    fav = Button(
+        text="★" if app.is_favorite(path) else "☆",
+        size_hint_x=None,
+        width=dp(42),
+        background_normal="",
+        background_color=PANEL_2,
         color=ACCENT_2 if app.is_favorite(path) else TEXT_2,
-        font_size="21sp",
+        font_size="20sp",
         bold=True
     )
 
@@ -1216,7 +1310,6 @@ def make_song_row(path, refresh_callback=None):
             refresh_callback()
 
     fav.bind(on_release=toggle)
-    row.add_widget(play)
     row.add_widget(fav)
     return row
 
@@ -2610,6 +2703,13 @@ class SettingsScreen(BaseFeature):
                 row.add_widget(b)
             root.add_widget(row)
 
+        updates = Button(
+            text=T("updates"), size_hint_y=None, height=dp(48),
+            background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True
+        )
+        updates.bind(on_release=lambda *_: App.get_running_app().open_screen("updates"))
+        root.add_widget(updates)
+
         appearance = Button(
             text=T("appearance"), size_hint_y=None, height=dp(48),
             background_normal="", background_color=PANEL_2, color=TEXT
@@ -2713,7 +2813,7 @@ class AboutScreen(BaseFeature):
             markup=True, color=TEXT, font_size="28sp"
         ))
         root.add_widget(Label(
-            text=f"{T('version')}: 1.7.1",
+            text=f"{T('version')}: {APP_VERSION}",
             color=ACCENT_2, font_size="18sp", bold=True
         ))
         root.add_widget(MadeInHungaryBanner())
@@ -3014,12 +3114,198 @@ class RGScreen(BaseFeature):
 
 
 class QueueScreen(BaseFeature):
-    def __init__(self,**kwargs):
-        super().__init__(**kwargs); r=self.make(T("queue")); sc=ScrollView(do_scroll_x=False); self.box=BoxLayout(orientation="vertical",size_hint_y=None,spacing=dp(6)); self.box.bind(minimum_height=self.box.setter("height")); sc.add_widget(self.box); r.add_widget(sc)
-    def on_pre_enter(self,*_):
-        a=App.get_running_app(); self.box.clear_widgets()
-        for p in a.queue_snapshot():
-            b=Button(text=clean_title(p),size_hint_y=None,height=dp(52),background_normal="",background_color=CARD,color=TEXT); b.bind(on_release=lambda _,path=p:a.play_path(path)); self.box.add_widget(b)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("queue"))
+
+        tools = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+        add_current = Button(
+            text=T("add_current"),
+            background_normal="",
+            background_color=ACCENT,
+            color=(0, .07, .12, 1),
+            bold=True,
+            font_size="10sp"
+        )
+        add_current.bind(on_release=lambda *_: self.add_current())
+        clear = Button(
+            text=T("clear_queue"),
+            background_normal="",
+            background_color=(.20, .07, .10, .95),
+            color=TEXT,
+            bold=True,
+            font_size="10sp"
+        )
+        clear.bind(on_release=lambda *_: self.clear())
+        tools.add_widget(add_current)
+        tools.add_widget(clear)
+        root.add_widget(tools)
+
+        self.status = Label(
+            text="",
+            size_hint_y=None,
+            height=dp(34),
+            color=ACCENT_2,
+            halign="left"
+        )
+        root.add_widget(self.status)
+
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(6)
+        )
+        self.box.bind(minimum_height=self.box.setter("height"))
+        self.scroll.add_widget(self.box)
+        root.add_widget(self.scroll)
+
+    def on_pre_enter(self, *_):
+        self.refresh()
+
+    def add_current(self):
+        app = App.get_running_app()
+        if app.current_path:
+            app.add_to_queue(app.current_path)
+        self.refresh()
+
+    def clear(self):
+        App.get_running_app().clear_play_queue()
+        self.refresh()
+
+    def refresh(self):
+        app = App.get_running_app()
+        self.box.clear_widgets()
+        manual = app.manual_queue_snapshot()
+
+        if manual:
+            self.status.text = f"{T('manual_queue')} • {len(manual)}"
+            for index, path in enumerate(manual):
+                row = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(4))
+
+                play = Button(
+                    text=("NEXT • " if index == 0 else "") + clean_title(path),
+                    background_normal="",
+                    background_color=CARD,
+                    color=TEXT,
+                    halign="left",
+                    valign="middle"
+                )
+                play.bind(size=lambda i, v: setattr(i, "text_size", (max(30, i.width-dp(8)), None)))
+                play.bind(on_release=lambda _, idx=index: app.play_queue_item(idx))
+                row.add_widget(play)
+
+                up = Button(text="UP", size_hint_x=None, width=dp(42), background_normal="", background_color=PANEL_2, color=TEXT_2, font_size="9sp")
+                down = Button(text="DN", size_hint_x=None, width=dp(42), background_normal="", background_color=PANEL_2, color=TEXT_2, font_size="9sp")
+                remove = Button(text="X", size_hint_x=None, width=dp(42), background_normal="", background_color=(.20,.07,.10,.95), color=TEXT, bold=True)
+                up.bind(on_release=lambda _, idx=index: self.move(idx, -1))
+                down.bind(on_release=lambda _, idx=index: self.move(idx, +1))
+                remove.bind(on_release=lambda _, idx=index: self.remove(idx))
+                row.add_widget(up); row.add_widget(down); row.add_widget(remove)
+                self.box.add_widget(row)
+        else:
+            self.status.text = T("queue_empty")
+            label = Label(
+                text=T("auto_queue"),
+                color=TEXT_2,
+                size_hint_y=None,
+                height=dp(34),
+                bold=True
+            )
+            self.box.add_widget(label)
+            for path in app.automatic_queue_preview(12):
+                b = Button(
+                    text=clean_title(path),
+                    size_hint_y=None,
+                    height=dp(52),
+                    background_normal="",
+                    background_color=CARD,
+                    color=TEXT,
+                    halign="left",
+                    valign="middle"
+                )
+                b.bind(size=lambda i, v: setattr(i, "text_size", (max(30, i.width-dp(8)), None)))
+                b.bind(on_release=lambda _, p=path: app.play_path(p))
+                self.box.add_widget(b)
+
+    def move(self, index, delta):
+        App.get_running_app().move_queue_item(index, delta)
+        self.refresh()
+
+    def remove(self, index):
+        App.get_running_app().remove_queue_item(index)
+        self.refresh()
+
+
+class UpdateScreen(BaseFeature):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make(T("updates"))
+
+        self.current = Label(
+            text=f"{T('current_version')}: {APP_VERSION}",
+            color=ACCENT_2,
+            size_hint_y=None,
+            height=dp(54),
+            bold=True,
+            font_size="18sp"
+        )
+        root.add_widget(self.current)
+
+        self.status = Label(
+            text="",
+            color=TEXT_2,
+            halign="center",
+            valign="middle"
+        )
+        self.status.bind(size=lambda i, v: setattr(i, "text_size", (i.width-dp(20), None)))
+        root.add_widget(self.status)
+
+        check = Button(
+            text=T("check_updates"),
+            size_hint_y=None,
+            height=dp(54),
+            background_normal="",
+            background_color=ACCENT,
+            color=(0, .07, .12, 1),
+            bold=True
+        )
+        check.bind(on_release=lambda *_: App.get_running_app().check_for_updates(silent=False))
+        root.add_widget(check)
+
+        self.download = Button(
+            text=T("download_update"),
+            size_hint_y=None,
+            height=dp(54),
+            background_normal="",
+            background_color=PANEL_2,
+            color=ACCENT_2,
+            bold=True,
+            disabled=True
+        )
+        self.download.bind(on_release=lambda *_: App.get_running_app().open_latest_update())
+        root.add_widget(self.download)
+
+    def on_pre_enter(self, *_):
+        self.current.text = f"{T('current_version')}: {APP_VERSION}"
+        app = App.get_running_app()
+        if app.latest_version:
+            self.show_result(app.latest_version, app.latest_version_tuple > app.current_version_tuple)
+        else:
+            self.status.text = T("check_updates")
+            self.download.disabled = True
+
+    def set_checking(self):
+        self.status.text = T("checking_updates")
+        self.download.disabled = True
+
+    def show_result(self, version, available):
+        if available:
+            self.status.text = f"{T('update_available')}: v{version}"
+            self.download.disabled = False
+        else:
+            self.status.text = T("up_to_date")
+            self.download.disabled = True
 
 
 class SleepScreen(BaseFeature):
@@ -3037,7 +3323,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.7.1"
+        self.title=f"JustMusic! Mobile v{APP_VERSION}"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3051,6 +3337,14 @@ class JustMusicApp(App):
         self.listen_seconds={}
         self._listen_stat_tick=time.time()
         self._folder_request_code=7616
+        self.play_queue=[]
+        self.mix_target_from_queue=False
+        self.latest_version=""
+        self.latest_version_tuple=(0,0,0)
+        self.latest_download_url=""
+        self.latest_release_url=""
+        self.current_version_tuple=self.version_tuple(APP_VERSION)
+        self._media_intent_bound=False
         auto_lang, auto_region = detect_system_locale()
         self.language=auto_lang
         self.region=auto_region
@@ -3074,7 +3368,12 @@ class JustMusicApp(App):
         self.manager=ScreenManager()
         self.create_screens()
         self.manager.current = "library" if self.setup_complete else "setup"
-        Clock.schedule_interval(self.tick,.10); Clock.schedule_once(lambda *_:self.permissions(),.4); Clock.schedule_once(lambda *_:self.scan(),1.2)
+        Clock.schedule_interval(self.tick,.10)
+        Clock.schedule_once(lambda *_:self.permissions(),.4)
+        Clock.schedule_once(lambda *_:self.setup_android_media_controls(),.7)
+        Clock.schedule_once(lambda *_:self.scan(),1.2)
+        if self.setup_complete:
+            Clock.schedule_once(lambda *_:self.check_for_updates(silent=True),6.0)
         return self.manager
 
     def create_screens(self):
@@ -3099,6 +3398,7 @@ class JustMusicApp(App):
         self.appearance_screen=AppearanceScreen(name="appearance")
         self.saving_screen=SavingScreen(name="saving")
         self.about_screen=AboutScreen(name="about")
+        self.update_screen=UpdateScreen(name="updates")
         for s in (
             self.setup_screen, self.library, self.lyrics_screen,
             self.artists_screen, self.artist_tracks_screen,
@@ -3107,7 +3407,7 @@ class JustMusicApp(App):
             self.folders_screen, self.playlists_screen, self.playlist_tracks_screen,
             self.now_playing_screen, self.history_screen, self.stats_screen, self.smart_screen,
             self.settings_screen, self.language_region_screen, self.appearance_screen,
-            self.saving_screen, self.about_screen,
+            self.saving_screen, self.about_screen, self.update_screen,
             MixScreen(name="mix"), EQScreen(name="eq"), RGScreen(name="rg"),
             QueueScreen(name="queue"), SleepScreen(name="sleep")
         ):
@@ -3142,6 +3442,7 @@ class JustMusicApp(App):
         self.setup_complete=True
         self.save_settings()
         self.rebuild_ui("library")
+        Clock.schedule_once(lambda *_: self.check_for_updates(silent=True), 3.0)
 
     def settings_path(self):
         # Az app saját írható tárhelye: frissítéskor megmarad.
@@ -3196,6 +3497,7 @@ class JustMusicApp(App):
                 for name, paths in (d.get("playlists", {}) or {}).items()
                 if isinstance(paths, list)
             }
+            self.play_queue=[str(p) for p in d.get("play_queue", []) if str(p).strip()]
             self.user_volume=float(d.get("volume", self.user_volume))
             self.restore_path=str(d.get("last_path", "") or "")
             self.restore_position=float(d.get("last_position", 0.0) or 0.0)
@@ -3226,6 +3528,7 @@ class JustMusicApp(App):
                 "favorites":sorted(self.favorites),
                 "custom_folders":list(self.custom_folders),
                 "playlists":self.playlists,
+                "play_queue":self.play_queue[:500],
                 "volume":self.user_volume,
                 "last_path":self.current_path or self.restore_path or "",
                 "last_position":(
@@ -3295,7 +3598,11 @@ class JustMusicApp(App):
                     if f.lower().endswith(SUPPORTED_AUDIO):
                         p=os.path.join(folder,f); found[os.path.realpath(p).lower()]=p
         self.songs=sorted(found.values(),key=lambda p:clean_title(p).lower())
+        valid={self.favorite_key(p) for p in self.songs}
+        self.play_queue=[p for p in self.play_queue if self.favorite_key(p) in valid and os.path.exists(p)]
         self.library.refresh_list()
+        try:self.manager.get_screen("queue").refresh()
+        except Exception:pass
         try:self.artists_screen.refresh()
         except Exception:pass
         try:self.albums_screen.refresh()
@@ -3312,12 +3619,92 @@ class JustMusicApp(App):
             self.restore_path = ""
             self.restore_position = 0.0
             self.restore_last_track(path, position)
+    def manual_queue_snapshot(self):
+        valid=[]
+        for path in list(self.play_queue):
+            if path in self.songs and os.path.exists(path):
+                valid.append(path)
+        if valid != self.play_queue:
+            self.play_queue=valid
+            self.save_settings()
+        return list(valid)
+
+    def automatic_queue_preview(self, limit=20):
+        if not self.songs:
+            return []
+        if self.current_index < 0:
+            return list(self.songs[:limit])
+        items=self.songs[self.current_index+1:]
+        if self.repeat_mode == "all":
+            items += self.songs[:self.current_index+1]
+        return items[:limit]
+
     def queue_snapshot(self):
-        if not self.songs:return []
-        if self.current_index<0:return list(self.songs)
-        return self.songs[self.current_index:]+self.songs[:self.current_index]
+        manual=self.manual_queue_snapshot()
+        return manual if manual else self.automatic_queue_preview(len(self.songs) or 20)
+
+    def add_to_queue(self, path):
+        if path not in self.songs:
+            return
+        self.play_queue.append(path)
+        self.save_settings()
+        try:self.manager.get_screen("queue").refresh()
+        except Exception:pass
+
+    def add_play_next(self, path):
+        if path not in self.songs:
+            return
+        self.play_queue.insert(0, path)
+        self.save_settings()
+        try:self.manager.get_screen("queue").refresh()
+        except Exception:pass
+
+    def clear_play_queue(self):
+        self.play_queue=[]
+        self.save_settings()
+
+    def remove_queue_item(self, index):
+        if 0 <= index < len(self.play_queue):
+            self.play_queue.pop(index)
+            self.save_settings()
+
+    def move_queue_item(self, index, delta):
+        target=index+delta
+        if 0 <= index < len(self.play_queue) and 0 <= target < len(self.play_queue):
+            self.play_queue[index], self.play_queue[target] = self.play_queue[target], self.play_queue[index]
+            self.save_settings()
+
+    def play_queue_item(self, index):
+        if not (0 <= index < len(self.play_queue)):
+            return
+        path=self.play_queue.pop(index)
+        self.save_settings()
+        self.play_path(path)
+
+    def _queued_target_index(self):
+        while self.play_queue:
+            path=self.play_queue[0]
+            if path in self.songs and os.path.exists(path):
+                return self.songs.index(path)
+            self.play_queue.pop(0)
+        return -1
+
+    def _target_is_manual_queue(self, index):
+        if not self.play_queue or not (0 <= index < len(self.songs)):
+            return False
+        return self.favorite_key(self.play_queue[0]) == self.favorite_key(self.songs[index])
+
+    def _consume_manual_target(self, index):
+        if self._target_is_manual_queue(index):
+            self.play_queue.pop(0)
+            self.save_settings()
+            return True
+        return False
+
     def next_index(self):
         if not self.songs:return -1
+        queued=self._queued_target_index()
+        if queued >= 0:return queued
         if self.repeat_mode=="one" and self.current_index>=0:return self.current_index
         if self.shuffle_enabled and len(self.songs)>1:return random.choice([i for i in range(len(self.songs)) if i!=self.current_index])
         if self.current_index<0:return 0
@@ -3356,6 +3743,7 @@ class JustMusicApp(App):
                 self.audio.seek(self.paused_position)
 
             self.library.player.set_playing(False)
+            self.show_android_notification(title, False)
 
         except Exception as error:
             print("UTOLSÓ DAL VISSZAÁLLÍTÁSI HIBA:", error)
@@ -3364,11 +3752,180 @@ class JustMusicApp(App):
         self.playlist_tracks_screen.set_playlist(name)
         self.manager.current = "playlist_tracks"
 
+    @staticmethod
+    def version_tuple(value):
+        nums=[int(x) for x in re.findall(r"\d+", str(value or ""))[:3]]
+        while len(nums)<3:
+            nums.append(0)
+        return tuple(nums[:3])
+
+    def setup_android_media_controls(self):
+        if platform != "android" or self._media_intent_bound:
+            return
+        try:
+            from android import activity
+            activity.bind(on_new_intent=self.on_android_media_intent)
+            self._media_intent_bound=True
+        except Exception as error:
+            print("MEDIA INTENT BIND HIBA:", error)
+
+    def on_android_media_intent(self, intent):
+        try:
+            action=str(intent.getAction() or "")
+        except Exception:
+            return
+
+        if action == MEDIA_ACTION_PREVIOUS:
+            Clock.schedule_once(lambda *_: self.previous(), 0)
+        elif action == MEDIA_ACTION_TOGGLE:
+            Clock.schedule_once(lambda *_: self.toggle_play(), 0)
+        elif action == MEDIA_ACTION_NEXT:
+            Clock.schedule_once(lambda *_: self.next_pressed(), 0)
+
+    def _media_pending_intent(self, action, request_code):
+        from jnius import autoclass
+        PythonActivity=autoclass("org.kivy.android.PythonActivity")
+        Intent=autoclass("android.content.Intent")
+        PendingIntent=autoclass("android.app.PendingIntent")
+        activity=PythonActivity.mActivity
+        intent=Intent(activity, activity.getClass())
+        intent.setAction(action)
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        flags=PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getActivity(activity, int(request_code), intent, flags)
+
+    def _content_pending_intent(self):
+        from jnius import autoclass
+        PythonActivity=autoclass("org.kivy.android.PythonActivity")
+        Intent=autoclass("android.content.Intent")
+        PendingIntent=autoclass("android.app.PendingIntent")
+        activity=PythonActivity.mActivity
+        intent=Intent(activity, activity.getClass())
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        flags=PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getActivity(activity, 4200, intent, flags)
+
+    def open_url(self, url):
+        if not url:
+            return
+        if platform == "android":
+            try:
+                from jnius import autoclass
+                Intent=autoclass("android.content.Intent")
+                Uri=autoclass("android.net.Uri")
+                PythonActivity=autoclass("org.kivy.android.PythonActivity")
+                PythonActivity.mActivity.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(str(url)))
+                )
+                return
+            except Exception as error:
+                print("URL MEGNYITÁSI HIBA:", error)
+        try:
+            import webbrowser
+            webbrowser.open(str(url))
+        except Exception:
+            pass
+
+    def check_for_updates(self, silent=False):
+        try:
+            self.update_screen.set_checking()
+        except Exception:
+            pass
+
+        def worker():
+            try:
+                req=urllib.request.Request(
+                    GITHUB_RELEASES_API,
+                    headers={
+                        "User-Agent": f"JustMusic/{APP_VERSION}",
+                        "Accept": "application/vnd.github+json",
+                    }
+                )
+                with urllib.request.urlopen(req, timeout=12) as response:
+                    releases=json.loads(response.read().decode("utf-8", errors="replace"))
+
+                best=None
+                best_tuple=(0,0,0)
+                if isinstance(releases, list):
+                    for release in releases:
+                        if not isinstance(release, dict) or release.get("draft") or release.get("prerelease"):
+                            continue
+                        version=self.version_tuple(release.get("tag_name") or release.get("name"))
+                        if version > best_tuple:
+                            best_tuple=version
+                            best=release
+
+                if best is None:
+                    raise RuntimeError("Nem található GitHub Release.")
+
+                version_text=".".join(str(x) for x in best_tuple)
+                release_url=str(best.get("html_url") or "")
+                download_url=""
+                for asset in best.get("assets", []) or []:
+                    name=str(asset.get("name") or "").lower()
+                    if name.endswith(".apk") and "arm64-v8a" in name:
+                        download_url=str(asset.get("browser_download_url") or "")
+                        break
+
+                def finish(*_):
+                    self.latest_version=version_text
+                    self.latest_version_tuple=best_tuple
+                    self.latest_release_url=release_url
+                    self.latest_download_url=download_url or release_url
+                    available=best_tuple > self.current_version_tuple
+                    try:self.update_screen.show_result(version_text, available)
+                    except Exception:pass
+                    if available and silent:
+                        self.show_update_popup(version_text)
+                Clock.schedule_once(finish, 0)
+
+            except Exception as error:
+                error_text=str(error)
+                def failed(*_, error_text=error_text):
+                    try:
+                        self.update_screen.status.text=f"Update checker hiba: {error_text}"
+                        self.update_screen.download.disabled=True
+                    except Exception:pass
+                    if not silent:
+                        self.show_simple_popup("JustMusic!", f"Update checker hiba:\n{error_text}")
+                Clock.schedule_once(failed, 0)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_simple_popup(self, title, message):
+        box=BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
+        label=Label(text=str(message), color=TEXT, halign="center", valign="middle")
+        label.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20),None)))
+        close=Button(text="OK", size_hint_y=None, height=dp(48), background_normal="", background_color=ACCENT, color=(0,.07,.12,1), bold=True)
+        box.add_widget(label);box.add_widget(close)
+        popup=Popup(title=title, content=box, size_hint=(.90,.48), auto_dismiss=True)
+        close.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def show_update_popup(self, version):
+        box=BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(10))
+        label=Label(
+            text=f"{T('update_available')}: v{version}\n\n{T('current_version')}: v{APP_VERSION}",
+            color=TEXT, halign="center", valign="middle"
+        )
+        label.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20),None)))
+        buttons=BoxLayout(size_hint_y=None,height=dp(50),spacing=dp(7))
+        later=Button(text=T("later"),background_normal="",background_color=PANEL_2,color=TEXT)
+        download=Button(text=T("download_update"),background_normal="",background_color=ACCENT,color=(0,.07,.12,1),bold=True)
+        buttons.add_widget(later);buttons.add_widget(download)
+        box.add_widget(label);box.add_widget(buttons)
+        popup=Popup(title="JustMusic! Update",content=box,size_hint=(.92,.55),auto_dismiss=False)
+        later.bind(on_release=popup.dismiss)
+        def do_download(*_):
+            popup.dismiss(); self.open_latest_update()
+        download.bind(on_release=do_download)
+        popup.open()
+
+    def open_latest_update(self):
+        self.open_url(self.latest_download_url or self.latest_release_url)
+
     def show_android_notification(self, title, playing=True):
-        """
-        Egyszerű JustMusic! now-playing értesítés.
-        A teljes MediaStyle gombos notification egy későbbi verzióban jön.
-        """
+        """Now-playing notification with lockscreen / notification transport controls."""
         if platform != "android":
             return
 
@@ -3382,10 +3939,11 @@ class JustMusicApp(App):
             NotificationBuilder = autoclass("android.app.Notification$Builder")
             BuildVersion = autoclass("android.os.Build$VERSION")
             BuildVersionCodes = autoclass("android.os.Build$VERSION_CODES")
+            Notification = autoclass("android.app.Notification")
+            android_R_drawable = autoclass("android.R$drawable")
 
             activity = PythonActivity.mActivity
             manager = activity.getSystemService(Context.NOTIFICATION_SERVICE)
-
             channel_id = "justmusic_playback"
 
             if BuildVersion.SDK_INT >= BuildVersionCodes.O:
@@ -3394,23 +3952,43 @@ class JustMusicApp(App):
                     "JustMusic! lejátszás",
                     NotificationManager.IMPORTANCE_LOW
                 )
+                channel.setDescription("JustMusic! media controls")
                 manager.createNotificationChannel(channel)
                 builder = NotificationBuilder(activity, channel_id)
             else:
                 builder = NotificationBuilder(activity)
 
-            # Android beépített ikon.
-            android_R_drawable = autoclass("android.R$drawable")
+            info=track_metadata(self.current_path) if self.current_path else {"artist":"", "album":""}
             builder.setSmallIcon(android_R_drawable.ic_media_play)
-            builder.setContentTitle("JustMusic!")
-            builder.setContentText(str(title or "Zenelejátszás"))
+            builder.setContentTitle(str(title or "JustMusic!"))
+            builder.setContentText(str(info.get("artist") or "JustMusic!"))
+            builder.setSubText(str(info.get("album") or ""))
+            builder.setContentIntent(self._content_pending_intent())
             builder.setOngoing(bool(playing))
             builder.setOnlyAlertOnce(True)
+            builder.setCategory(Notification.CATEGORY_TRANSPORT)
+            builder.setVisibility(Notification.VISIBILITY_PUBLIC)
+
+            prev_pi=self._media_pending_intent(MEDIA_ACTION_PREVIOUS, 4201)
+            toggle_pi=self._media_pending_intent(MEDIA_ACTION_TOGGLE, 4202)
+            next_pi=self._media_pending_intent(MEDIA_ACTION_NEXT, 4203)
+
+            builder.addAction(android_R_drawable.ic_media_previous, "Previous", prev_pi)
+            builder.addAction(
+                android_R_drawable.ic_media_pause if playing else android_R_drawable.ic_media_play,
+                "Pause" if playing else "Play",
+                toggle_pi
+            )
+            builder.addAction(android_R_drawable.ic_media_next, "Next", next_pi)
+
             try:
-                Notification=autoclass("android.app.Notification")
-                builder.setCategory(Notification.CATEGORY_TRANSPORT)
-                builder.setVisibility(Notification.VISIBILITY_PUBLIC)
-            except Exception:pass
+                MediaStyle=autoclass("android.app.Notification$MediaStyle")
+                style=MediaStyle()
+                style.setShowActionsInCompactView([0,1,2])
+                builder.setStyle(style)
+            except Exception as error:
+                print("MEDIASTYLE HIBA:", error)
+
             try:
                 cover=cover_for_track(self.current_path) if self.current_path else ""
                 if cover:
@@ -3695,9 +4273,13 @@ class JustMusicApp(App):
         i=self.previous_index();
         if i>=0:self.play_index(i)
     def next(self):
-        i=self.next_index();
-        if i>=0:self.play_index(i)
-        else:self.audio.pause();self.library.player.set_playing(False)
+        i=self.next_index()
+        if i>=0:
+            self._consume_manual_target(i)
+            self.play_index(i)
+        else:
+            self.audio.pause();self.library.player.set_playing(False)
+            self.show_android_notification(clean_title(self.current_path) if self.current_path else "JustMusic!", False)
     def toggle_shuffle(self):self.shuffle_enabled=not self.shuffle_enabled;self.library.player.set_shuffle(self.shuffle_enabled);self.save_settings()
     def cycle_repeat(self):
         seq=["off","all","one"];self.repeat_mode=seq[(seq.index(self.repeat_mode)+1)%3];self.library.player.set_repeat(self.repeat_mode);self.save_settings()
@@ -3847,8 +4429,11 @@ class JustMusicApp(App):
         if target < 0:
             return
 
+        target_from_queue=self._target_is_manual_queue(target)
+
         # GAPLESS = PC-hez hasonlóan fade nélküli azonnali váltás.
         if self.mix_gapless_enabled:
+            if target_from_queue:self._consume_manual_target(target)
             self.play_index(target)
             return
 
@@ -3862,6 +4447,7 @@ class JustMusicApp(App):
                 return
 
             self.mix_target_index = target
+            self.mix_target_from_queue = target_from_queue
             self.mix_target_rg_db = replaygain_db(self.songs[target])
             self.mix_started_at = time.time()
             self.mix_in_progress = True
@@ -3918,9 +4504,13 @@ class JustMusicApp(App):
                     except Exception:pass
                 try:self.connect_screen.now.text=title
                 except Exception:pass
+                if self.mix_target_from_queue:
+                    self._consume_manual_target(self.current_index)
+                self.show_android_notification(title, True)
 
             self.mix_in_progress=False
             self.mix_target_index=None
+            self.mix_target_from_queue=False
             self.mix_started_at=None
 
     def fade_out_current(self):
@@ -4020,6 +4610,11 @@ class JustMusicApp(App):
 
     def on_stop(self):
         self.save_settings()
+        if platform == "android" and self._media_intent_bound:
+            try:
+                from android import activity
+                activity.unbind(on_new_intent=self.on_android_media_intent)
+            except Exception:pass
         self.hide_android_notification()
         self.audio.close()
 
