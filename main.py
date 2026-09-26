@@ -48,7 +48,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.8.2"
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -2508,8 +2508,10 @@ class SettingsScreen(BaseFeature):
     def on_pre_enter(self, *_):
         app = App.get_running_app()
         self.title_label.text = f"[b]{ui_text(app, 'settings')}[/b]"
+        prefix = "" if app.setup_complete else "ELSŐ BEÁLLÍTÁS • "
         self.locale_info.text = (
-            f"{ui_text(app, 'language')}: "
+            prefix
+            + f"{ui_text(app, 'language')}: "
             f"{SUPPORTED_LANGUAGES.get(app.language, app.language)}   •   "
             f"{ui_text(app, 'region')}: "
             f"{SUPPORTED_REGIONS.get(app.region, app.region)}"
@@ -3202,7 +3204,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.1 CLEAN"
+        self.title="JustMusic! Mobile v1.8.2 ULTRA SAFE"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3258,10 +3260,11 @@ class JustMusicApp(App):
         self.history_screen=HistoryScreen(name="history")
         self.stats_screen=StatsScreen(name="stats")
         self.smart_screen=SmartScreen(name="smart")
-        self.settings_screen=SettingsScreen(name="settings")
-        self.language_region_screen=LanguageRegionScreen(name="language_region")
-        self.updates_screen=UpdatesScreen(name="updates")
-        self.about_screen=AboutScreen(name="about")
+        # ULTRA SAFE: extra v1.7/v1.8 screens are lazy-loaded.
+        self.settings_screen=None
+        self.language_region_screen=None
+        self.updates_screen=None
+        self.about_screen=None
         for s in (
             self.library, self.lyrics_screen,
             self.artists_screen, self.artist_tracks_screen,
@@ -3269,7 +3272,6 @@ class JustMusicApp(App):
             self.favorites_screen, self.connect_screen,
             self.folders_screen, self.playlists_screen, self.playlist_tracks_screen,
             self.now_playing_screen, self.history_screen, self.stats_screen, self.smart_screen,
-            self.settings_screen, self.language_region_screen, self.updates_screen, self.about_screen,
             MixScreen(name="mix"), EQScreen(name="eq"), RGScreen(name="rg"),
             QueueScreen(name="queue"), SleepScreen(name="sleep")
         ):
@@ -3280,10 +3282,9 @@ class JustMusicApp(App):
         Clock.schedule_once(lambda *_:self.permissions(),.4)
         Clock.schedule_once(lambda *_:self.scan(),1.2)
 
-        # First setup is a delayed popup, NOT a startup ScreenManager dependency.
-        if not self.setup_complete:
-            Clock.schedule_once(self.show_first_setup, 1.8)
-
+        # ULTRA SAFE:
+        # no popup, locale/JNI, update check or media-control setup during startup.
+        # Language/region can be selected later from the gear menu.
         return self.manager
 
     def settings_path(self):
@@ -3570,6 +3571,39 @@ class JustMusicApp(App):
         self.playlist_tracks_screen.set_playlist(name)
         self.manager.current = "playlist_tracks"
 
+    def show_safe_message(self, title, message):
+        try:
+            content = BoxLayout(
+                orientation="vertical",
+                padding=dp(12),
+                spacing=dp(10)
+            )
+            content.add_widget(Label(
+                text=str(message),
+                color=TEXT,
+                halign="center",
+                valign="middle"
+            ))
+            close = Button(
+                text="OK",
+                size_hint_y=None,
+                height=dp(48),
+                background_normal="",
+                background_color=ACCENT,
+                color=(0, .07, .12, 1),
+                bold=True
+            )
+            content.add_widget(close)
+            popup = Popup(
+                title=str(title),
+                content=content,
+                size_hint=(.88, .55)
+            )
+            close.bind(on_release=lambda *_: popup.dismiss())
+            popup.open()
+        except BaseException as error:
+            print("SAFE MESSAGE HIBA:", error)
+
     def show_first_setup(self, *_):
         """
         First-run selector. It is intentionally delayed until the main UI is already alive.
@@ -3737,10 +3771,13 @@ class JustMusicApp(App):
 
     def check_for_updates(self):
         try:
-            self.updates_screen.status.text = ui_text(self, "checking")
-            self.updates_screen.download.disabled = True
-        except Exception:
-            pass
+            if not self.manager.has_screen("updates"):
+                self.ensure_extra_screen("updates")
+            if self.updates_screen is not None:
+                self.updates_screen.status.text = ui_text(self, "checking")
+                self.updates_screen.download.disabled = True
+        except BaseException as error:
+            print("UPDATE SCREEN PREP HIBA:", error)
 
         def worker():
             try:
@@ -3777,11 +3814,12 @@ class JustMusicApp(App):
                     self.latest_release_url = release_url
                     self.latest_download_url = download_url or release_url
                     try:
-                        self.updates_screen.show_result(
-                            latest_text,
-                            latest > current
-                        )
-                    except Exception as error:
+                        if self.updates_screen is not None:
+                            self.updates_screen.show_result(
+                                latest_text,
+                                latest > current
+                            )
+                    except BaseException as error:
                         print("UPDATE UI HIBA:", error)
 
                 Clock.schedule_once(finish, 0)
@@ -4308,7 +4346,55 @@ class JustMusicApp(App):
         try:self.lyrics_screen.rebuild_lyrics()
         except Exception:pass
         self.refresh_lyrics(True);self.manager.current="lyrics"
-    def open_screen(self,n):self.manager.current=n
+    def ensure_extra_screen(self, name):
+        """
+        Create v1.7/v1.8 screens only when the user opens them.
+        Any construction error is caught so it cannot kill JustMusic startup.
+        """
+        if self.manager.has_screen(name):
+            return True
+
+        factories = {
+            "settings": SettingsScreen,
+            "language_region": LanguageRegionScreen,
+            "updates": UpdatesScreen,
+            "about": AboutScreen,
+        }
+
+        screen_class = factories.get(name)
+        if screen_class is None:
+            return False
+
+        try:
+            screen = screen_class(name=name)
+            self.manager.add_widget(screen)
+
+            if name == "settings":
+                self.settings_screen = screen
+            elif name == "language_region":
+                self.language_region_screen = screen
+            elif name == "updates":
+                self.updates_screen = screen
+            elif name == "about":
+                self.about_screen = screen
+
+            return True
+
+        except BaseException as error:
+            print("EXTRA SCREEN INIT HIBA:", name, error)
+            self.show_safe_message(
+                "JustMusic!",
+                f"A(z) {name} menü most nem nyitható meg.\n\n{error}"
+            )
+            return False
+
+    def open_screen(self, n):
+        if n in {"settings", "language_region", "updates", "about"}:
+            if not self.ensure_extra_screen(n):
+                return
+        if self.manager.has_screen(n):
+            self.manager.current = n
+
 
     def favorite_key(self, path):
         try:return os.path.realpath(str(path))
@@ -4646,4 +4732,54 @@ class JustMusicApp(App):
 
 
 if __name__ == "__main__":
-    JustMusicApp().run()
+    try:
+        JustMusicApp().run()
+    except BaseException as fatal:
+        import traceback
+        message = "".join(
+            traceback.format_exception(
+                type(fatal),
+                fatal,
+                fatal.__traceback__
+            )
+        )
+        print("JUSTMUSIC FATAL STARTUP ERROR:")
+        print(message)
+
+        # Best-effort private crash log.
+        try:
+            crash_root = Path(
+                os.environ.get("ANDROID_PRIVATE")
+                or os.environ.get("HOME")
+                or "."
+            )
+            crash_file = crash_root / "justmusic_startup_error.txt"
+            crash_file.write_text(message, encoding="utf-8")
+            print("Crash log:", crash_file)
+        except BaseException:
+            pass
+
+        # Best-effort Android toast with the actual exception.
+        if platform == "android":
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass(
+                    "org.kivy.android.PythonActivity"
+                )
+                Toast = autoclass("android.widget.Toast")
+                activity = PythonActivity.mActivity
+                if activity is not None:
+                    short_message = (
+                        "JustMusic hiba: "
+                        + str(fatal)[:180]
+                    )
+                    Toast.makeText(
+                        activity,
+                        short_message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                    time.sleep(2.5)
+            except BaseException:
+                pass
+
+        raise
