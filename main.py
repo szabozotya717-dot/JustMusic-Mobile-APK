@@ -48,7 +48,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
-APP_VERSION = "1.8.2"
+APP_VERSION = "1.8.3"
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -2404,9 +2404,9 @@ class StatsScreen(BaseFeature):
         self.summary=Label(text="", color=TEXT, font_size="18sp", halign="center", valign="middle")
         self.summary.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20), None)))
         root.add_widget(self.summary)
-        self.top=Label(text="", color=TEXT_2, font_size="14sp", halign="left", valign="top")
-        self.top.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20), None)))
-        root.add_widget(self.top)
+        self.top_label=Label(text="", color=TEXT_2, font_size="14sp", halign="left", valign="top")
+        self.top_label.bind(size=lambda i,v:setattr(i,"text_size",(i.width-dp(20), None)))
+        root.add_widget(self.top_label)
 
     def on_pre_enter(self,*_): self.refresh()
 
@@ -2421,7 +2421,7 @@ class StatsScreen(BaseFeature):
         for idx,(path,count) in enumerate(ranked[:8],1):
             lines.append(f"{idx}. {clean_title(path)} — {count}x")
         if len(lines)==1: lines.append("Még nincs elég adat.")
-        self.top.text="\n".join(lines)
+        self.top_label.text="\n".join(lines)
 
 
 class SmartScreen(BaseFeature):
@@ -3204,7 +3204,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.2 ULTRA SAFE"
+        self.title="JustMusic! Mobile v1.8.3 CRASHFIX"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
