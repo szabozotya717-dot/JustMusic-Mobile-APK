@@ -48,7 +48,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
-APP_VERSION = "1.8.3"
+APP_VERSION = "1.8.4"
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -339,8 +339,21 @@ def _metadata_artist_title(path):
         return "", ""
 
 
+_TRACK_META_CACHE = {}
+_TRACK_META_CACHE_LIMIT = 2500
+
 def track_metadata(path):
-    """artist / title / album mobil könyvtárnézetekhez."""
+    """artist / title / album mobil könyvtárnézetekhez, gyorsítótárral."""
+    path = str(path or "")
+    try:
+        mtime = os.path.getmtime(path)
+    except Exception:
+        mtime = 0.0
+
+    cached = _TRACK_META_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return dict(cached[1])
+
     artist = ""
     title = ""
     album = ""
@@ -375,15 +388,14 @@ def track_metadata(path):
 
     if not artist:
         artist = "Ismeretlen előadó"
-
     if not album:
         album = "Ismeretlen album"
 
-    return {
-        "artist": artist,
-        "title": title or "Ismeretlen szám",
-        "album": album,
-    }
+    info = {"artist": artist, "title": title or "Ismeretlen szám", "album": album}
+    if len(_TRACK_META_CACHE) >= _TRACK_META_CACHE_LIMIT:
+        _TRACK_META_CACHE.clear()
+    _TRACK_META_CACHE[path] = (mtime, dict(info))
+    return info
 
 
 
@@ -1363,7 +1375,10 @@ class LibraryScreen(Screen):
             cursor_color=ACCENT_2,
             padding=[dp(14), dp(12)]
         )
-        self.search.bind(text=lambda *_: self.refresh_list())
+        self._search_event = None
+        self._render_generation = 0
+        self._render_queue = []
+        self.search.bind(text=self._on_search_text)
         root.add_widget(self.search)
 
         p = GlassPanel(size_hint_y=None, height=dp(54), padding=[dp(13), dp(7)])
@@ -1385,25 +1400,36 @@ class LibraryScreen(Screen):
     def on_pre_enter(self, *_):
         self.refresh_list()
 
+    def _on_search_text(self, *_):
+        if self._search_event is not None:
+            try:self._search_event.cancel()
+            except Exception:pass
+        self._search_event = Clock.schedule_once(lambda *_: self.refresh_list(), .18)
+
     def refresh_list(self):
         app = App.get_running_app()
+        self._render_generation += 1
+        generation = self._render_generation
         self.box.clear_widgets()
         q = self.search.text.strip().lower()
-        visible = []
-
-        for path in app.songs:
-            title = clean_title(path)
-            if not q or q in title.lower():
-                visible.append(path)
-
+        visible = [p for p in app.songs if (not q or q in clean_title(p).lower())]
         self.status.text = (
             f"{len(visible)} dal • {app.backend_name}"
-            if app.songs
-            else "Nem találtam zenét a beállított zene mappákban."
+            if app.songs else
+            "Nem találtam zenét a beállított zene mappákban."
         )
+        self._render_queue = visible
+        self._render_chunk(generation)
 
-        for path in visible:
+    def _render_chunk(self, generation):
+        if generation != self._render_generation or not self._render_queue:
+            return
+        chunk = self._render_queue[:28]
+        self._render_queue = self._render_queue[28:]
+        for path in chunk:
             self.box.add_widget(make_song_row(path, self.refresh_list))
+        if self._render_queue:
+            Clock.schedule_once(lambda *_: self._render_chunk(generation), 0)
 
 
 class LyricsScreen(Screen):
@@ -3204,7 +3230,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.3 CRASHFIX"
+        self.title="JustMusic! Mobile v1.8.4 PERFORMANCE"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3218,6 +3244,8 @@ class JustMusicApp(App):
         self.listen_seconds={}
         self._listen_stat_tick=time.time()
         self._folder_request_code=7616
+        self._scan_in_progress=False
+        self._scan_pending=False
 
         # CLEAN rebuild state. No Android/JNI call happens here.
         self.language="hu"
@@ -3278,7 +3306,7 @@ class JustMusicApp(App):
             self.manager.add_widget(s)
         self.library.player.set_shuffle(self.shuffle_enabled); self.library.player.set_repeat(self.repeat_mode)
         self.library.player.set_mix_status(self.crossfade_enabled,self.mix_gapless_enabled,self.mix_fade_out_seconds,self.mix_fade_in_seconds)
-        Clock.schedule_interval(self.tick,.10)
+        Clock.schedule_interval(self.tick,.25)
         Clock.schedule_once(lambda *_:self.permissions(),.4)
         Clock.schedule_once(lambda *_:self.scan(),1.2)
 
@@ -3437,32 +3465,52 @@ class JustMusicApp(App):
         self.scan()
 
     def scan(self):
-        roots=self.music_roots()
-        found={}
-        for root in roots:
-            if not os.path.isdir(root):continue
-            for folder,_,files in os.walk(root):
-                for f in files:
-                    if f.lower().endswith(SUPPORTED_AUDIO):
-                        p=os.path.join(folder,f); found[os.path.realpath(p).lower()]=p
-        self.songs=sorted(found.values(),key=lambda p:clean_title(p).lower())
-        self.library.refresh_list()
-        try:self.artists_screen.refresh()
+        if self._scan_in_progress:
+            self._scan_pending = True
+            return
+        self._scan_in_progress = True
+        self._scan_pending = False
+        try:self.library.status.text = "Zenetár frissítése…"
         except Exception:pass
-        try:self.albums_screen.refresh()
-        except Exception:pass
-        try:self.favorites_screen.refresh()
-        except Exception:pass
-        try:self.folders_screen.refresh()
-        except Exception:pass
+        roots = list(self.music_roots())
 
-        # Első könyvtár-betöltés után visszaállítjuk az utolsó dalt.
+        def worker():
+            found = {}
+            try:
+                for root in roots:
+                    if not os.path.isdir(root):
+                        continue
+                    for folder, _, files in os.walk(root):
+                        for filename in files:
+                            if filename.lower().endswith(SUPPORTED_AUDIO):
+                                path = os.path.join(folder, filename)
+                                try:key = os.path.realpath(path).lower()
+                                except Exception:key = path.lower()
+                                found[key] = path
+                songs = sorted(found.values(), key=lambda p: clean_title(p).lower())
+            except Exception as error:
+                print("ZENETÁR SCAN HIBA:", error)
+                songs = []
+            Clock.schedule_once(lambda *_: self._finish_scan(songs), 0)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_scan(self, songs):
+        self.songs = list(songs)
+        self._scan_in_progress = False
+        try:self.library.refresh_list()
+        except Exception as error:print("LIBRARY REFRESH HIBA:", error)
+
         if self.restore_path:
             path = self.restore_path
             position = self.restore_position
             self.restore_path = ""
             self.restore_position = 0.0
             self.restore_last_track(path, position)
+
+        if self._scan_pending:
+            self._scan_pending = False
+            Clock.schedule_once(lambda *_: self.scan(), .1)
     def clean_manual_queue(self):
         if not self.manual_queue:
             return
@@ -4660,7 +4708,7 @@ class JustMusicApp(App):
         self.add_listen_time()
 
         # Automatikus állapotmentés kb. 5 másodpercenként.
-        if now - self.last_save_tick >= 5.0:
+        if now - self.last_save_tick >= 20.0:
             self.last_save_tick = now
             self.save_settings()
 
@@ -4715,7 +4763,7 @@ class JustMusicApp(App):
 
     def on_resume(self):
         # Visszatéréskor automatikus könyvtár-frissítés.
-        Clock.schedule_once(lambda *_: self.scan(), 0.4)
+        Clock.schedule_once(lambda *_: self.scan(), 0.8)
 
     def on_stop(self):
         self.save_settings()
