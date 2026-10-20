@@ -50,7 +50,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
-APP_VERSION = "1.8.5"
+APP_VERSION = "1.8.6"
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -1119,6 +1119,11 @@ class NativeAudio:
         self.next_player = None
         self.eq = None
         self.desktop = None
+        self.completed = False
+        self.on_completed = None
+        self._playback_generation = 0
+        self._next_generation = None
+        self._completion_listeners = []
         if self.android:
             try:
                 from jnius import autoclass
@@ -1146,11 +1151,38 @@ class NativeAudio:
         try: player.release()
         except Exception: pass
 
-    def _new(self, path):
+    def _new(self, path, generation):
         p = self.MediaPlayer()
         p.setDataSource(str(path))
         p.prepare()
+        try:
+            # Android invokes this on a Java thread when a song actually ends.
+            # The Python/Kivy screen is only touched later on its own Clock thread.
+            from jnius import PythonJavaClass, java_method
+            audio = self
+            class OnSongFinished(PythonJavaClass):
+                __javainterfaces__ = ["android/media/MediaPlayer$OnCompletionListener"]
+
+                @java_method('(Landroid/media/MediaPlayer;)V')
+                def onCompletion(self, _player):
+                    if audio._playback_generation == generation:
+                        audio.completed = True
+                        Clock.schedule_once(lambda _dt:
+                            audio._send_completion(generation), 0)
+
+            listener = OnSongFinished()
+            p.setOnCompletionListener(listener)
+            self._completion_listeners.append(listener)
+        except BaseException as error:
+            # The 250ms end-of-song check remains available as fallback.
+            print("MEDIA COMPLETION LISTENER SKIP:", error)
         return p
+
+    def _send_completion(self, generation):
+        if generation != self._playback_generation or not self.completed:
+            return
+        if self.on_completed is not None:
+            self.on_completed()
 
     def load(self, path):
         self._release_eq()
@@ -1158,7 +1190,10 @@ class NativeAudio:
             self._release(self.player)
             self._release(self.next_player)
             self.next_player = None
-            self.player = self._new(path)
+            self._playback_generation += 1
+            self.completed = False
+            self._completion_listeners.clear()
+            self.player = self._new(path, self._playback_generation)
             return True
         if self.desktop is not None:
             try: self.desktop.stop(); self.desktop.unload()
@@ -1170,7 +1205,8 @@ class NativeAudio:
         if not self.android:
             return False
         self._release(self.next_player)
-        self.next_player = self._new(path)
+        self._next_generation = self._playback_generation + 1
+        self.next_player = self._new(path, self._next_generation)
         return True
 
     def start(self):
@@ -1241,6 +1277,9 @@ class NativeAudio:
         old = self.player
         self.player = self.next_player
         self.next_player = None
+        self._playback_generation = self._next_generation or self._playback_generation + 1
+        self._next_generation = None
+        self.completed = False
         self._release_eq()
         self._release(old)
         return True
@@ -1268,6 +1307,8 @@ class NativeAudio:
         self._release(self.player)
         self._release(self.next_player)
         self.player = self.next_player = None
+        self._completion_listeners.clear()
+        self.on_completed = None
 
 
 class PlayerBar(GlassPanel):
@@ -1359,20 +1400,20 @@ class MadeInHungaryBanner(GlassPanel):
 
 def make_song_row(path, refresh_callback=None):
     app = App.get_running_app()
-    row = BoxLayout(size_hint_y=None, height=dp(62), spacing=dp(6))
+    row = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(5))
 
     cover_path = cover_for_track(path)
     if cover_path:
         cover = Image(
             source=cover_path,
             size_hint_x=None,
-            width=dp(58),
+            width=dp(50),
             allow_stretch=True,
             keep_ratio=True
         )
     else:
         cover = JustMusicIcon(icon_name="music", icon_color=ACCENT_2,
-                              size_hint_x=None, width=dp(58))
+                              size_hint_x=None, width=dp(50))
 
     row.add_widget(cover)
 
@@ -1384,7 +1425,7 @@ def make_song_row(path, refresh_callback=None):
         background_normal="",
         background_color=CARD,
         color=TEXT,
-        font_size="15sp"
+        font_size="13sp"
     )
     play.bind(size=lambda inst, size: setattr(inst, "text_size",
                   (max(dp(30), size[0] - dp(10)), size[1])))
@@ -1394,7 +1435,7 @@ def make_song_row(path, refresh_callback=None):
         icon_name="heart",
         icon_color=(1, .35, .47, 1) if app.is_favorite(path) else TEXT_2,
         size_hint_x=None,
-        width=dp(46),
+        width=dp(42),
         fill_color=PANEL_2
     )
 
@@ -1409,7 +1450,7 @@ def make_song_row(path, refresh_callback=None):
     next_btn = Button(
         text="NEXT",
         size_hint_x=None,
-        width=dp(48),
+        width=dp(42),
         background_normal="",
         background_color=PANEL_2,
         color=ACCENT_2,
@@ -1421,7 +1462,7 @@ def make_song_row(path, refresh_callback=None):
     queue_btn = Button(
         text="Q+",
         size_hint_x=None,
-        width=dp(40),
+        width=dp(34),
         background_normal="",
         background_color=PANEL_2,
         color=ACCENT_2,
@@ -1543,8 +1584,9 @@ class LibraryScreen(Screen):
         p.add_widget(self.status)
         root.add_widget(p)
 
-        scroll = ScrollView(do_scroll_x=False)
-        self.box = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None, padding=[0, dp(3), 0, dp(7)])
+        scroll = ScrollView(do_scroll_x=False, bar_width=dp(3), scroll_type=["content"])
+        self.box = BoxLayout(orientation="vertical", spacing=dp(5),
+                             size_hint_y=None, padding=[0, dp(3), 0, dp(8)])
         self.box.bind(minimum_height=self.box.setter("height"))
         scroll.add_widget(self.box)
         root.add_widget(scroll)
@@ -1569,11 +1611,22 @@ class LibraryScreen(Screen):
         self.box.clear_widgets()
         q = self.search.text.strip().lower()
         visible = [p for p in app.songs if (not q or q in clean_title(p).lower())]
-        self.status.text = (
-            f"{len(visible)} dal • {app.backend_name}"
-            if app.songs else
-            "Nem találtam zenét a beállított zene mappákban."
-        )
+        if app._scan_in_progress and not app.songs:
+            self.status.text = "Zenetár frissítése…"
+            message = "Zenék keresése a telefonon…"
+        elif app.songs:
+            self.status.text = f"{len(visible)} dal • {app.backend_name}"
+            message = "Nincs találat a keresésre." if q else ""
+        else:
+            self.status.text = "Nem találtam zenét."
+            message = "A BEÁLLÍTÁSOK → ZENE MAPPÁK menüben adj hozzá zenemappát."
+        if not visible and message:
+            label = Label(text=message, color=TEXT_2, font_size="13sp",
+                          halign="center", valign="middle",
+                          size_hint_y=None, height=dp(90))
+            label.bind(size=lambda widget, size:
+                       setattr(widget, "text_size", (max(dp(20), size[0]-dp(20)), size[1])))
+            self.box.add_widget(label)
         self._render_queue = visible
         self._render_chunk(generation)
 
@@ -3391,7 +3444,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.4 PERFORMANCE"
+        self.title="JustMusic! Mobile v1.8.6"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3417,8 +3470,13 @@ class JustMusicApp(App):
         self.latest_release_url=""
         self.latest_download_url=""
         self._media_intent_bound=False
+        self._media_session = None
+        self._media_state_last_sync = 0.0
+        self._playing_expected = False
 
-        self.audio=NativeAudio(); self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
+        self.audio=NativeAudio()
+        self.audio.on_completed = self.on_audio_completed
+        self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
         self.shuffle_enabled=False; self.repeat_mode="off"
         # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
         self.crossfade_enabled=False
@@ -3772,6 +3830,7 @@ class JustMusicApp(App):
                 self.audio.seek(self.paused_position)
 
             self.library.player.set_playing(False)
+            self._playing_expected = False
 
         except Exception as error:
             print("UTOLSÓ DAL VISSZAÁLLÍTÁSI HIBA:", error)
@@ -4141,6 +4200,72 @@ class JustMusicApp(App):
 
         return PendingIntent.getActivity(activity, 4200, intent, flags)
 
+    def update_android_media_state(self, playing, position=None):
+        """Update the Android MediaSession position (lock-screen progress)."""
+        if platform != "android" or self._media_session is None:
+            return
+        try:
+            from jnius import autoclass
+            PlaybackState = autoclass("android.media.session.PlaybackState")
+            actions = (PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE |
+                       PlaybackState.ACTION_PLAY_PAUSE |
+                       PlaybackState.ACTION_SKIP_TO_NEXT |
+                       PlaybackState.ACTION_SKIP_TO_PREVIOUS |
+                       PlaybackState.ACTION_SEEK_TO)
+            if position is None:
+                position = self.audio.position()
+            state = autoclass("android.media.session.PlaybackState$Builder")()
+            state.setActions(actions)
+            state.setState(PlaybackState.STATE_PLAYING if playing else
+                           PlaybackState.STATE_PAUSED, int(max(0.0, position) * 1000),
+                           1.0 if playing else 0.0)
+            self._media_session.setPlaybackState(state.build())
+        except BaseException as error:
+            print("MEDIASESSION PLAYBACK STATE SKIP:", error)
+
+    def update_android_media_session(self, playing, info, bitmap=None):
+        """Expose the current song/cover/playback to Android's media controls."""
+        if platform != "android":
+            return
+        try:
+            from jnius import autoclass
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            if activity is None:
+                return
+            if self._media_session is None:
+                MediaSession = autoclass("android.media.session.MediaSession")
+                session = MediaSession(activity, "JustMusic!")
+                try:
+                    session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
+                                     MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
+                except BaseException:
+                    pass
+                try:
+                    session.setSessionActivity(self._content_pending_intent())
+                except BaseException:
+                    pass
+                session.setActive(True)
+                self._media_session = session
+
+            MediaMetadata = autoclass("android.media.MediaMetadata")
+            meta = autoclass("android.media.MediaMetadata$Builder")()
+            meta.putString(MediaMetadata.METADATA_KEY_TITLE,
+                           str(info.get("title") or "JustMusic!"))
+            meta.putString(MediaMetadata.METADATA_KEY_ARTIST,
+                           str(info.get("artist") or "Ismeretlen előadó"))
+            meta.putString(MediaMetadata.METADATA_KEY_ALBUM,
+                           str(info.get("album") or ""))
+            meta.putLong(MediaMetadata.METADATA_KEY_DURATION,
+                         int(max(0.0, self.audio.duration()) * 1000))
+            if bitmap is not None:
+                meta.putBitmap(MediaMetadata.METADATA_KEY_ART, bitmap)
+                meta.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
+            self._media_session.setMetadata(meta.build())
+            self.update_android_media_state(playing)
+        except BaseException as error:
+            # Notification buttons still work through PendingIntents if this fails.
+            print("MEDIASESSION INIT SKIP:", error)
+
     def show_android_notification(self, title, playing=True):
         if platform != "android":
             return
@@ -4196,7 +4321,22 @@ class JustMusicApp(App):
             except BaseException as error:
                 print("NOTIFICATION CONTENT INTENT HIBA:", error)
 
-            # Media buttons are extra. If anything fails, the notification still appears.
+            cover_bitmap = None
+            try:
+                cover = cover_for_track(self.current_path) if self.current_path else ""
+                if cover:
+                    BitmapFactory = autoclass("android.graphics.BitmapFactory")
+                    cover_bitmap = BitmapFactory.decodeFile(cover)
+                    if cover_bitmap is not None:
+                        builder.setLargeIcon(cover_bitmap)
+            except BaseException as error:
+                print("NOTIFICATION COVER SKIP:", error)
+
+            # A real MediaSession makes Android's lock-screen media card aware
+            # of the title, artwork, playback state and current position.
+            self.update_android_media_session(playing, info, cover_bitmap)
+
+            # Existing notification action intents: prev / play-pause / next.
             try:
                 self.setup_android_media_controls()
 
@@ -4233,29 +4373,18 @@ class JustMusicApp(App):
                         "android.app.Notification$MediaStyle"
                     )
                     style = MediaStyle()
-                    style.setShowActionsInCompactView([0, 1, 2])
+                    if self._media_session is not None:
+                        style.setMediaSession(self._media_session.getSessionToken())
+                    try:
+                        style.setShowActionsInCompactView([0, 1, 2])
+                    except BaseException as error:
+                        print("MEDIASTYLE COMPACT SKIP:", error)
                     builder.setStyle(style)
                 except BaseException as error:
                     print("MEDIASTYLE SKIP:", error)
 
             except BaseException as error:
                 print("MEDIA ACTION SKIP:", error)
-
-            try:
-                cover = (
-                    cover_for_track(self.current_path)
-                    if self.current_path
-                    else ""
-                )
-                if cover:
-                    BitmapFactory = autoclass(
-                        "android.graphics.BitmapFactory"
-                    )
-                    bitmap = BitmapFactory.decodeFile(cover)
-                    if bitmap:
-                        builder.setLargeIcon(bitmap)
-            except BaseException as error:
-                print("NOTIFICATION COVER SKIP:", error)
 
             manager.notify(420, builder.build())
 
@@ -4495,6 +4624,7 @@ class JustMusicApp(App):
         except Exception:pass
         try:self.connect_screen.now.text=title
         except Exception:pass
+        self._playing_expected = True
         self.audio.start();self.audio.apply_eq(self.eq_values);self.apply_volume();self.library.player.set_playing(True);self.refresh_lyrics(True)
         try:
             self.setup_android_media_controls()
@@ -4517,6 +4647,7 @@ class JustMusicApp(App):
             return
         if self.audio.is_playing():
             self.paused_position=self.audio.position()
+            self._playing_expected = False
             self.audio.pause()
             self.library.player.set_playing(False)
             self.show_android_notification(
@@ -4525,8 +4656,11 @@ class JustMusicApp(App):
             )
             self.save_settings()
         else:
-            self.audio.start()
+            self.audio.completed = False
+            self._playing_expected = True
+            # Resume at the actual saved position (not an old value).
             self.audio.seek(self.paused_position)
+            self.audio.start()
             self.apply_volume()
             self.library.player.set_playing(True)
             self.show_android_notification(
@@ -4542,10 +4676,19 @@ class JustMusicApp(App):
             self.consume_manual_queue_target(i)
             self.play_index(i)
         else:
+            self._playing_expected = False
             self.audio.pause()
             self.library.player.set_playing(False)
             if self.current_path:
                 self.show_android_notification(clean_title(self.current_path), False)
+    def on_audio_completed(self):
+        """Advance automatically, respecting queue, shuffle and repeat modes."""
+        if not self._playing_expected or self.mix_in_progress or not self.current_path:
+            return
+        self._playing_expected = False  # prevent duplicate Java/tick callbacks
+        self.audio.completed = False
+        self.next()
+
     def toggle_shuffle(self):self.shuffle_enabled=not self.shuffle_enabled;self.library.player.set_shuffle(self.shuffle_enabled);self.save_settings()
     def cycle_repeat(self):
         seq=["off","all","one"];self.repeat_mode=seq[(seq.index(self.repeat_mode)+1)%3];self.library.player.set_repeat(self.repeat_mode);self.save_settings()
@@ -4824,6 +4967,7 @@ class JustMusicApp(App):
                 except Exception:pass
                 if self.mix_target_from_queue:
                     self.consume_manual_queue_target(self.current_index)
+                self._playing_expected = True
                 self.show_android_notification(title, True)
 
             self.mix_in_progress=False
@@ -4873,7 +5017,13 @@ class JustMusicApp(App):
             self.last_save_tick = now
             self.save_settings()
 
-        if self.sleep_deadline and time.time()>=self.sleep_deadline:self.sleep_deadline=None;self.audio.pause();self.library.player.set_playing(False)
+        if self.sleep_deadline and time.time()>=self.sleep_deadline:
+            self.sleep_deadline = None
+            self._playing_expected = False
+            self.audio.pause()
+            self.library.player.set_playing(False)
+            if self.current_path:
+                self.show_android_notification(clean_title(self.current_path), False)
         if self.current_path is None:return
         pos=self.audio.position();length=self.audio.duration();p=self.library.player;p.elapsed.text=fmt_time(pos);p.total.text=fmt_time(length)
         if not p.slider.dragging:p.slider.max=max(1,length);p.slider.value=min(pos,max(1,length))
@@ -4882,7 +5032,24 @@ class JustMusicApp(App):
             if self.manager.current=="now_playing":
                 self.now_playing_screen.progress.text=f"{fmt_time(pos)} / {fmt_time(length)}"
         except Exception:pass
-        if self.audio.is_playing() and length>0:
+        playing_now = self.audio.is_playing()
+        # Complete a crossfade even after the outgoing MediaPlayer has stopped.
+        if self.mix_in_progress:
+            self.update_crossfade()
+            return
+        if self._playing_expected and self.audio.completed:
+            self.on_audio_completed()
+            return
+        # MediaPlayer.isPlaying() becomes false at the exact end. The old code
+        # skipped that state, so the next track sometimes never started.
+        if (self._playing_expected and not self.mix_in_progress and not playing_now
+                and length > 0 and pos >= max(0, length - 0.6)):
+            self.on_audio_completed()
+            return
+        if self._media_session is not None and now - self._media_state_last_sync >= 5.0:
+            self._media_state_last_sync = now
+            self.update_android_media_state(self._playing_expected, pos)
+        if playing_now and length>0:
             rem=max(0,length-pos)
             trigger=max(self.mix_fade_out_seconds,self.mix_fade_in_seconds)
             if (
@@ -4894,13 +5061,11 @@ class JustMusicApp(App):
                 and not self.mix_in_progress
             ):
                 self.start_next_transition(auto=True)
-            if self.mix_in_progress:
-                self.update_crossfade()
-            elif rem<=.20:
+            if not self.mix_in_progress and rem<=.20:
                 if self.mix_gapless_enabled and self.mix_auto_transition_enabled:
                     self.start_next_transition(auto=True)
                 else:
-                    self.next()
+                    self.on_audio_completed()
     def refresh_lyrics(self,force=False):
         if not self.lyrics:
             return
@@ -4937,6 +5102,13 @@ class JustMusicApp(App):
             except BaseException:
                 pass
         self.hide_android_notification()
+        if self._media_session is not None:
+            try:
+                self._media_session.setActive(False)
+                self._media_session.release()
+            except BaseException:
+                pass
+            self._media_session = None
         self.audio.close()
 
 
