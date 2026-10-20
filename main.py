@@ -18,6 +18,8 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.properties import NumericProperty, BooleanProperty
 from kivy.uix.boxlayout import BoxLayout
+from kivy.graphics.instructions import InstructionGroup
+from math import sin, cos, pi
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
@@ -48,7 +50,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
-APP_VERSION = "1.8.4"
+APP_VERSION = "1.8.5"
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -888,6 +890,199 @@ class GlassPanel(BoxLayout):
         self.border.rounded_rectangle = (self.x, self.y, self.width, self.height, self.radius)
 
 
+# JustMusic! 1.8.5: canvas-based icons. No extra fonts or image files are needed.
+# Kivy draws the icons as lines, so Android font glyph availability does not matter.
+def draw_justmusic_icon(group, name, x, y, size, tint):
+    scale = size / 24.0
+    stroke = max(dp(1.4), scale * 1.9)
+
+    def path(points, closed=False):
+        coords = []
+        for xx, yy in points:
+            coords.extend((x + xx * scale, y + yy * scale))
+        group.add(Line(points=coords, close=closed, width=stroke))
+
+    def ring(cx, cy, radius):
+        group.add(Line(circle=(x + cx * scale, y + cy * scale,
+                               radius * scale), width=stroke))
+
+    group.add(Color(*tint))
+    if name == "back":
+        path([(20, 12), (4, 12), (11, 19)])
+        path([(4, 12), (11, 5)])
+    elif name == "gear":
+        ring(12, 12, 7)
+        ring(12, 12, 2.7)
+        for degree in range(0, 360, 45):
+            a = degree * pi / 180.0
+            path([(12 + 8 * cos(a), 12 + 8 * sin(a)),
+                  (12 + 11 * cos(a), 12 + 11 * sin(a))])
+    elif name == "heart":
+        path([(12, 3), (19, 9), (21, 12), (22, 15), (20, 18),
+              (17, 20), (14, 20), (12, 18), (10, 20), (7, 20),
+              (4, 18), (2, 15), (3, 12), (5, 9), (12, 3)], True)
+    elif name == "trash":
+        path([(5, 18), (19, 18)])
+        path([(9, 18), (9, 20), (15, 20), (15, 18)])
+        path([(6, 16), (7.2, 4), (16.8, 4), (18, 16)])
+        path([(10, 14), (10.5, 7)])
+        path([(14, 14), (13.5, 7)])
+    elif name in ("globe", "language", "language_region"):
+        ring(12, 12, 10)
+        path([(2, 12), (22, 12)])
+        path([(12, 2), (12, 22)])
+        path([(12, 2), (8, 6), (7.5, 12), (8, 18), (12, 22)])
+        path([(12, 2), (16, 6), (16.5, 12), (16, 18), (12, 22)])
+    elif name == "region":
+        path([(12, 2), (6, 10), (4, 13), (4, 16),
+              (6, 20), (9, 22), (15, 22), (18, 20),
+              (20, 16), (20, 13), (18, 10), (12, 2)], True)
+        ring(12, 15, 2.6)
+    elif name == "mix":
+        path([(2, 19), (6, 19), (18, 5), (22, 5)])
+        path([(18, 9), (22, 5), (18, 2)])
+        path([(2, 5), (6, 5), (18, 19), (22, 19)])
+        path([(18, 22), (22, 19), (18, 16)])
+    elif name == "eq":
+        for xx, knob in ((5, 15), (12, 9), (19, 14)):
+            path([(xx, 3), (xx, 21)])
+            path([(xx - 3, knob - 1.8), (xx + 3, knob - 1.8),
+                  (xx + 3, knob + 1.8), (xx - 3, knob + 1.8)], True)
+    elif name == "rg":
+        path([(2, 9), (6, 9), (11, 5), (11, 19),
+              (6, 15), (2, 15)], True)
+        path([(14, 8), (16, 10), (16, 14), (14, 16)])
+        path([(17, 5), (20, 9), (20, 15), (17, 19)])
+    elif name == "folders":
+        path([(2, 5), (22, 5), (22, 17), (12, 17),
+              (9, 20), (2, 20), (2, 5)], True)
+    elif name == "playlists":
+        path([(2, 19), (16, 19)])
+        path([(2, 14), (16, 14)])
+        path([(2, 9), (11, 9)])
+        path([(19, 19), (19, 7)])
+        ring(16.3, 6.1, 2.6)
+    elif name == "queue":
+        path([(3, 19), (16, 19)])
+        path([(3, 14), (16, 14)])
+        path([(3, 9), (12, 9)])
+        path([(18, 17), (22, 13), (18, 9)])
+        path([(22, 13), (22, 4)])
+    elif name == "connect":
+        path([(3, 5), (3, 20), (21, 20), (21, 5), (3, 5)], True)
+        path([(3, 10), (7, 10), (12, 5)])
+        path([(3, 15), (10, 15), (18, 7)])
+    elif name == "updates":
+        path([(12, 21), (12, 7), (7, 12)])
+        path([(12, 7), (17, 12)])
+        path([(3, 6), (3, 3), (21, 3), (21, 6)])
+    elif name == "about":
+        ring(12, 12, 10)
+        ring(12, 17, 1)
+        path([(12, 12), (12, 6)])
+    elif name == "music":
+        path([(10, 7), (10, 19), (21, 21), (21, 9)])
+        ring(6.5, 6.5, 3)
+        ring(17.5, 8.5, 3)
+    else:
+        ring(12, 12, 8)
+
+
+class JustMusicIcon(Widget):
+    """Drawn icon used beside a label; no special Unicode or font necessary."""
+    def __init__(self, icon_name="music", icon_color=ACCENT_2, **kwargs):
+        self.icon_name = icon_name
+        self.icon_color = icon_color
+        super().__init__(**kwargs)
+        self._icon_group = InstructionGroup()
+        self.canvas.after.add(self._icon_group)
+        self.bind(pos=self._refresh_icon, size=self._refresh_icon)
+        self._refresh_icon()
+
+    def _refresh_icon(self, *_):
+        self._icon_group.clear()
+        size = min(dp(24), self.width * 0.72, self.height * 0.72)
+        if size > 0:
+            draw_justmusic_icon(self._icon_group, self.icon_name,
+                                self.center_x - size / 2,
+                                self.center_y - size / 2,
+                                size, self.icon_color)
+
+
+class JustMusicIconButton(Button):
+    """Rounded, touch-friendly icon button, optionally with label to its right."""
+    def __init__(self, icon_name="gear", icon_color=ACCENT_2,
+                 icon_align="center", fill_color=PANEL_2,
+                 edge_color=(0.18, 0.68, 1, 0.26), **kwargs):
+        self.icon_name = icon_name
+        self.icon_color = icon_color
+        self.icon_align = icon_align
+        self._base_fill = fill_color
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs["background_color"] = (0, 0, 0, 0)
+        if icon_align == "left":
+            kwargs.setdefault("halign", "left")
+            kwargs.setdefault("valign", "middle")
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            self._fill_instruction = Color(*fill_color)
+            self._rounded_bg = RoundedRectangle(pos=self.pos, size=self.size,
+                                                radius=[dp(11)])
+            Color(*edge_color)
+            self._rounded_border = Line(rounded_rectangle=(self.x, self.y,
+                self.width, self.height, dp(11)), width=1.0)
+        self._icon_group = InstructionGroup()
+        self.canvas.after.add(self._icon_group)
+        self.bind(pos=self._refresh_icon, size=self._refresh_icon,
+                  state=self._pressed_style)
+        if icon_align == "left":
+            self.bind(size=self._align_label)
+            self._align_label()
+        self._refresh_icon()
+
+    def _align_label(self, *_):
+        # Label texture is centered: half the removed width becomes left margin.
+        self.text_size = (max(dp(20), self.width - dp(94)), self.height)
+
+    def _pressed_style(self, *_):
+        if self.state == "down":
+            self._fill_instruction.rgba = tuple(min(1, c * 1.20)
+                for c in self._base_fill[:3]) + (self._base_fill[3],)
+        else:
+            self._fill_instruction.rgba = self._base_fill
+
+    def set_icon_color(self, new_color):
+        self.icon_color = new_color
+        self._refresh_icon()
+
+    def _refresh_icon(self, *_):
+        self._rounded_bg.pos = self.pos
+        self._rounded_bg.size = self.size
+        self._rounded_border.rounded_rectangle = (
+            self.x, self.y, self.width, self.height, dp(11))
+        self._icon_group.clear()
+        size = min(dp(23), self.height * 0.59)
+        x = self.x + dp(14) if self.icon_align == "left" else self.center_x - size / 2
+        y = self.center_y - size / 2
+        if size > 0:
+            draw_justmusic_icon(self._icon_group, self.icon_name, x, y,
+                                size, self.icon_color)
+
+
+def icon_text_row(icon, label, icon_color=ACCENT_2):
+    """Return a compact title with a vector icon before the existing text."""
+    row = BoxLayout(size_hint_y=None, height=dp(28), spacing=dp(5))
+    glyph = JustMusicIcon(icon_name=icon, icon_color=icon_color,
+                          size_hint_x=None, width=dp(28))
+    label.halign = "left"
+    label.valign = "middle"
+    label.bind(size=lambda inst, size: setattr(inst, "text_size", size))
+    row.add_widget(glyph)
+    row.add_widget(label)
+    return row
+
+
 class DarkOverlay(Widget):
     def __init__(self, opacity_value=0.60, **kwargs):
         super().__init__(**kwargs)
@@ -1136,8 +1331,8 @@ class MadeInHungaryBanner(GlassPanel):
         super().__init__(
             orientation="vertical",
             size_hint_y=None,
-            height=dp(86),
-            padding=[dp(14), dp(8)],
+            height=dp(67),
+            padding=[dp(14), dp(6)],
             spacing=dp(1),
             **kwargs
         )
@@ -1176,13 +1371,8 @@ def make_song_row(path, refresh_callback=None):
             keep_ratio=True
         )
     else:
-        cover = Label(
-            text="♫",
-            size_hint_x=None,
-            width=dp(58),
-            color=ACCENT_2,
-            font_size="24sp"
-        )
+        cover = JustMusicIcon(icon_name="music", icon_color=ACCENT_2,
+                              size_hint_x=None, width=dp(58))
 
     row.add_widget(cover)
 
@@ -1191,29 +1381,26 @@ def make_song_row(path, refresh_callback=None):
         text=title,
         halign="left",
         valign="middle",
-        text_size=(Window.width - dp(130), None),
         background_normal="",
         background_color=CARD,
         color=TEXT,
         font_size="15sp"
     )
+    play.bind(size=lambda inst, size: setattr(inst, "text_size",
+                  (max(dp(30), size[0] - dp(10)), size[1])))
     play.bind(on_release=lambda *_: app.play_path(path))
 
-    fav = Button(
-        text="★" if app.is_favorite(path) else "☆",
+    fav = JustMusicIconButton(
+        icon_name="heart",
+        icon_color=(1, .35, .47, 1) if app.is_favorite(path) else TEXT_2,
         size_hint_x=None,
-        width=dp(52),
-        background_normal="",
-        background_color=PANEL_2,
-        color=ACCENT_2 if app.is_favorite(path) else TEXT_2,
-        font_size="21sp",
-        bold=True
+        width=dp(46),
+        fill_color=PANEL_2
     )
 
     def toggle(*_):
         app.toggle_favorite(path)
-        fav.text = "★" if app.is_favorite(path) else "☆"
-        fav.color = ACCENT_2 if app.is_favorite(path) else TEXT_2
+        fav.set_icon_color((1, .35, .47, 1) if app.is_favorite(path) else TEXT_2)
         if refresh_callback:
             refresh_callback()
 
@@ -1272,15 +1459,10 @@ class LibraryScreen(Screen):
         )
         brand.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
 
-        settings_button = Button(
-            text="⚙",
-            size_hint_x=None,
-            width=dp(52),
-            background_normal="",
-            background_color=PANEL_2,
-            color=ACCENT_2,
-            bold=True,
-            font_size="22sp"
+        settings_button = JustMusicIconButton(
+            icon_name="gear", icon_color=ACCENT_2,
+            size_hint_x=None, width=dp(48),
+            fill_color=PANEL_2
         )
         settings_button.bind(
             on_release=lambda *_:
@@ -1292,75 +1474,49 @@ class LibraryScreen(Screen):
         root.add_widget(brand_row)
         root.add_widget(MadeInHungaryBanner())
 
-        # Mobil könyvtár-navigáció: a PC-s fő nézetekből áthozva.
-        nav1 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
-        nav2 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
-        for parent, text, target in (
-            (nav1, "DALOK", "library"),
-            (nav1, "ELŐADÓK", "artists"),
-            (nav1, "ALBUMOK", "albums"),
-            (nav2, "KEDVENCEK", "favorites"),
-            (nav2, "CONNECT", "connect"),
-            (nav2, "FRISSÍTÉS", "refresh"),
-        ):
-            b = Button(
-                text=text,
-                background_normal="",
-                background_color=PANEL_2,
-                color=ACCENT_2 if target != "refresh" else TEXT_2,
-                bold=True,
-                font_size="10sp"
-            )
-            if target == "refresh":
-                b.bind(on_release=lambda *_: App.get_running_app().scan())
-            else:
-                b.bind(on_release=lambda _, t=target: App.get_running_app().open_screen(t))
-            parent.add_widget(b)
-        root.add_widget(nav1)
-        root.add_widget(nav2)
-
-        nav3 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
+        # v1.8.5: all library destinations on ONE horizontally swipeable line.
+        # Replaces four rows with one: more vertical room for the music library.
+        nav_scroll = ScrollView(
+            size_hint_y=None, height=dp(49),
+            do_scroll_x=True, do_scroll_y=False,
+            scroll_type=["content"], bar_width=dp(3)
+        )
+        nav_strip = BoxLayout(
+            orientation="horizontal", size_hint_x=None,
+            height=dp(44), size_hint_y=None,
+            spacing=dp(6), padding=[dp(2), dp(1), dp(10), dp(1)]
+        )
+        nav_strip.bind(minimum_width=nav_strip.setter("width"))
         for text, target in (
+            ("DALOK", "library"),
+            ("ELŐADÓK", "artists"),
+            ("ALBUMOK", "albums"),
+            ("KEDVENCEK", "favorites"),
+            ("CONNECT", "connect"),
+            ("FRISSÍTÉS", "refresh"),
             ("MAPPÁK", "folders"),
             ("PLAYLISTEK", "playlists"),
             ("MOST SZÓL", "now_playing"),
-        ):
-            b = Button(
-                text=text,
-                background_normal="",
-                background_color=PANEL_2,
-                color=ACCENT_2,
-                bold=True,
-                font_size="9sp"
-            )
-            b.bind(
-                on_release=lambda _, t=target:
-                    App.get_running_app().open_screen(t)
-            )
-            nav3.add_widget(b)
-
-        root.add_widget(nav3)
-
-        nav4 = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
-        for text, target in (
             ("ELŐZMÉNY", "history"),
             ("STAT", "stats"),
             ("SMART", "smart"),
         ):
-            b = Button(
+            button = Button(
                 text=text,
-                background_normal="",
-                background_color=(.025, .085, .145, .96),
-                color=TEXT_2,
-                bold=True,
-                font_size="9sp"
+                size_hint_x=None,
+                width=dp(max(67, 23 + len(text) * 7.2)),
+                background_normal="", background_color=PANEL_2,
+                color=ACCENT_2 if target != "refresh" else TEXT_2,
+                bold=True, font_size="10sp"
             )
-            b.bind(
-                on_release=lambda _, t=target:
-                    App.get_running_app().open_screen(t)
-            )
-            nav4.add_widget(b)
-        root.add_widget(nav4)
+            if target == "refresh":
+                button.bind(on_release=lambda *_: App.get_running_app().scan())
+            else:
+                button.bind(on_release=lambda _, t=target:
+                    App.get_running_app().open_screen(t))
+            nav_strip.add_widget(button)
+        nav_scroll.add_widget(nav_strip)
+        root.add_widget(nav_scroll)
 
         self.search = TextInput(
             hint_text="Keresés a zenék között…",
@@ -1444,14 +1600,9 @@ class LyricsScreen(Screen):
 
         root = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(7))
         top = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(6))
-        back = Button(
-            text="VISSZA",
-            size_hint_x=None,
-            width=dp(88),
-            background_normal="",
-            background_color=PANEL_2,
-            color=TEXT,
-            bold=True
+        back = JustMusicIconButton(
+            icon_name="back", icon_color=ACCENT_2,
+            size_hint_x=None, width=dp(50), fill_color=PANEL_2
         )
         back.bind(on_release=lambda *_: App.get_running_app().show_library())
         self.track = Label(
@@ -1590,7 +1741,11 @@ class BaseFeature(Screen):
     def make(self,title):
         self.add_widget(Image(source="party_bg.png",allow_stretch=True,keep_ratio=False)); self.add_widget(DarkOverlay(.68))
         root=BoxLayout(orientation="vertical",padding=dp(18),spacing=dp(12)); top=BoxLayout(size_hint_y=None,height=dp(54))
-        back=Button(text="VISSZA",size_hint_x=None,width=dp(88),background_normal="",background_color=PANEL_2,color=TEXT,bold=True); back.bind(on_release=lambda *_:App.get_running_app().show_library())
+        back = JustMusicIconButton(
+            icon_name="back", icon_color=ACCENT_2,
+            size_hint_x=None, width=dp(50), fill_color=PANEL_2
+        )
+        back.bind(on_release=lambda *_: App.get_running_app().show_library())
         lab=Label(text=f"[b]{title}[/b]",markup=True,color=TEXT,font_size="23sp",halign="left",valign="middle"); lab.bind(size=lambda i,v:setattr(i,"text_size",(i.width,i.height))); self.title_label=lab; top.add_widget(back); top.add_widget(lab); root.add_widget(top); self.add_widget(root); return root
 
 
@@ -2067,14 +2222,11 @@ class FoldersScreen(BaseFeature):
             row.add_widget(label)
 
             if custom:
-                remove = Button(
-                    text="TÖRLÉS",
-                    size_hint_x=None,
-                    width=dp(82),
-                    background_normal="",
-                    background_color=(.20, .07, .10, .95),
-                    color=TEXT,
-                    bold=True
+                remove = JustMusicIconButton(
+                    icon_name="trash", icon_color=(1, .52, .54, 1),
+                    size_hint_x=None, width=dp(48),
+                    fill_color=(.20, .07, .10, .95),
+                    edge_color=(1, .32, .42, .3)
                 )
                 remove.bind(
                     on_release=lambda _, p=path:
@@ -2272,14 +2424,11 @@ class PlaylistTracksScreen(BaseFeature):
             )
             play.bind(on_release=lambda _, p=path: app.play_path(p))
 
-            remove = Button(
-                text="X",
-                size_hint_x=None,
-                width=dp(48),
-                background_normal="",
-                background_color=(.20, .07, .10, .95),
-                color=TEXT,
-                bold=True
+            remove = JustMusicIconButton(
+                icon_name="trash", icon_color=(1, .52, .54, 1),
+                size_hint_x=None, width=dp(48),
+                fill_color=(.20, .07, .10, .95),
+                edge_color=(1, .32, .42, .3)
             )
             remove.bind(
                 on_release=lambda _, p=path:
@@ -2370,17 +2519,24 @@ class NowPlayingScreen(BaseFeature):
         root.add_widget(actions)
 
         row = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
-        fav = Button(text="KEDVENC", background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True)
+        self.fav_button = JustMusicIconButton(
+            icon_name="heart", icon_color=TEXT_2,
+            fill_color=PANEL_2, size_hint_x=None, width=dp(58)
+        )
         lyrics = Button(text="DALSZÖVEG", background_normal="", background_color=PANEL_2, color=ACCENT_2, bold=True)
-        fav.bind(on_release=lambda *_: self.toggle_favorite())
+        self.fav_button.bind(on_release=lambda *_: self.toggle_favorite())
         lyrics.bind(on_release=lambda *_: App.get_running_app().open_lyrics())
-        row.add_widget(fav); row.add_widget(lyrics); root.add_widget(row)
+        row.add_widget(self.fav_button); row.add_widget(lyrics); root.add_widget(row)
 
     def on_pre_enter(self, *_):
         self.refresh()
 
     def refresh(self):
         app = App.get_running_app()
+        self.fav_button.set_icon_color(
+            (1, .35, .47, 1) if app.current_path and app.is_favorite(app.current_path)
+            else TEXT_2
+        )
         if not app.current_path:
             self.cover.source = "icon.png"
             self.title.text = "Nincs lejátszás"
@@ -2400,6 +2556,9 @@ class NowPlayingScreen(BaseFeature):
         app = App.get_running_app()
         if app.current_path:
             app.toggle_favorite(app.current_path)
+            self.fav_button.set_icon_color(
+                (1, .35, .47, 1) if app.is_favorite(app.current_path) else TEXT_2
+            )
 
 
 class HistoryScreen(BaseFeature):
@@ -2492,44 +2651,49 @@ class SettingsScreen(BaseFeature):
         root = self.make("BEÁLLÍTÁSOK")
 
         self.locale_info = Label(
-            text="",
-            color=ACCENT_2,
-            size_hint_y=None,
-            height=dp(44),
-            bold=True
+            text="", color=ACCENT_2, size_hint_y=None,
+            height=dp(44), bold=True
         )
         root.add_widget(self.locale_info)
 
+        # Keep every original label. Icons are drawn BEFORE the texts.
         entries = (
-            ("NYELV ÉS RÉGIÓ", "language_region"),
-            ("MIX / CROSSFADE", "mix"),
-            ("EQUALIZER", "eq"),
-            ("REPLAYGAIN", "rg"),
-            ("ZENE MAPPÁK", "folders"),
-            ("PLAYLISTEK", "playlists"),
-            ("LEJÁTSZÁSI SOR", "queue"),
-            ("CONNECT", "connect"),
-            ("FRISSÍTÉSEK", "updates"),
-            ("NÉVJEGY", "about"),
+            ("NYELV ÉS RÉGIÓ", "language_region", "globe"),
+            ("MIX / CROSSFADE", "mix", "mix"),
+            ("EQUALIZER", "eq", "eq"),
+            ("REPLAYGAIN", "rg", "rg"),
+            ("ZENE MAPPÁK", "folders", "folders"),
+            ("PLAYLISTEK", "playlists", "playlists"),
+            ("LEJÁTSZÁSI SOR", "queue", "queue"),
+            ("CONNECT", "connect", "connect"),
+            ("FRISSÍTÉSEK", "updates", "updates"),
+            ("NÉVJEGY", "about", "about"),
         )
+        # Allow all settings to stay reachable on compact Android displays.
+        settings_scroll = ScrollView(do_scroll_x=False)
+        settings_list = BoxLayout(
+            orientation="vertical", size_hint_y=None,
+            spacing=dp(7), padding=[dp(2), dp(3), dp(2), dp(12)]
+        )
+        settings_list.bind(minimum_height=settings_list.setter("height"))
 
         self.buttons = {}
-        for label, target in entries:
-            b = Button(
-                text=label,
-                size_hint_y=None,
-                height=dp(48),
-                background_normal="",
-                background_color=ACCENT if target == "language_region" else PANEL_2,
-                color=(0, .07, .12, 1) if target == "language_region" else TEXT,
-                bold=True
+        for label, target, icon in entries:
+            selected = target == "language_region"
+            button = JustMusicIconButton(
+                text=label, icon_name=icon, icon_align="left",
+                size_hint_y=None, height=dp(48),
+                fill_color=ACCENT if selected else PANEL_2,
+                icon_color=(0, .09, .16, 1) if selected else ACCENT_2,
+                color=(0, .09, .16, 1) if selected else TEXT,
+                bold=True, font_size="13sp"
             )
-            b.bind(
-                on_release=lambda _, t=target:
-                    App.get_running_app().open_screen(t)
-            )
-            root.add_widget(b)
-            self.buttons[target] = b
+            button.bind(on_release=lambda _, t=target:
+                        App.get_running_app().open_screen(t))
+            settings_list.add_widget(button)
+            self.buttons[target] = button
+        settings_scroll.add_widget(settings_list)
+        root.add_widget(settings_scroll)
 
     def on_pre_enter(self, *_):
         app = App.get_running_app()
@@ -2571,7 +2735,7 @@ class LanguageRegionScreen(BaseFeature):
             size_hint_y=None,
             height=dp(28)
         )
-        root.add_widget(self.lang_title)
+        root.add_widget(icon_text_row("language", self.lang_title))
 
         lang_rows = BoxLayout(
             orientation="vertical",
@@ -2608,7 +2772,7 @@ class LanguageRegionScreen(BaseFeature):
             size_hint_y=None,
             height=dp(28)
         )
-        root.add_widget(self.region_title)
+        root.add_widget(icon_text_row("region", self.region_title))
 
         reg_rows = BoxLayout(
             orientation="vertical",
@@ -3064,13 +3228,12 @@ class QueueScreen(BaseFeature):
         )
         current.bind(on_release=lambda *_: self.add_current())
 
-        clear = Button(
-            text="SOR TÖRLÉSE",
-            background_normal="",
-            background_color=(.20, .07, .10, .95),
-            color=TEXT,
-            bold=True,
-            font_size="10sp"
+        clear = JustMusicIconButton(
+            text="SOR TÖRLÉSE", icon_name="trash", icon_align="left",
+            icon_color=(1, .52, .54, 1),
+            fill_color=(.20, .07, .10, .95),
+            edge_color=(1, .32, .42, .3),
+            color=TEXT, bold=True, font_size="10sp"
         )
         clear.bind(on_release=lambda *_: self.clear_queue())
 
@@ -3165,13 +3328,11 @@ class QueueScreen(BaseFeature):
                 background_color=PANEL_2,
                 color=ACCENT_2
             )
-            remove = Button(
-                text="X",
-                size_hint_x=None,
-                width=dp(38),
-                background_normal="",
-                background_color=(.20, .07, .10, .95),
-                color=TEXT
+            remove = JustMusicIconButton(
+                icon_name="trash", icon_color=(1, .52, .54, 1),
+                size_hint_x=None, width=dp(42),
+                fill_color=(.20, .07, .10, .95),
+                edge_color=(1, .32, .42, .3)
             )
 
             up.bind(
