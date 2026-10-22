@@ -51,6 +51,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
 APP_VERSION = "1.8.6"
+APP_UI_REVISION = "REV2"  # Látható jelzés az új APK megkülönböztetésére.
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -917,6 +918,14 @@ def draw_justmusic_icon(group, name, x, y, size, tint):
             a = degree * pi / 180.0
             path([(12 + 8 * cos(a), 12 + 8 * sin(a)),
                   (12 + 11 * cos(a), 12 + 11 * sin(a))])
+    elif name == "chevron_left":
+        path([(16, 20), (8, 12), (16, 4)])
+    elif name == "chevron_right":
+        path([(8, 20), (16, 12), (8, 4)])
+    elif name == "auto_next":
+        path([(3, 5), (3, 19), (14, 12), (3, 5)], True)
+        path([(17, 5), (17, 19)])
+        path([(21, 5), (21, 19)])
     elif name == "heart":
         path([(12, 3), (19, 9), (21, 12), (22, 15), (20, 18),
               (17, 20), (14, 20), (12, 18), (10, 20), (7, 20),
@@ -1372,8 +1381,8 @@ class MadeInHungaryBanner(GlassPanel):
         super().__init__(
             orientation="vertical",
             size_hint_y=None,
-            height=dp(67),
-            padding=[dp(14), dp(6)],
+            height=dp(58),
+            padding=[dp(12), dp(4)],
             spacing=dp(1),
             **kwargs
         )
@@ -1385,7 +1394,7 @@ class MadeInHungaryBanner(GlassPanel):
             halign="left",
             valign="middle",
             size_hint_y=None,
-            height=dp(32)
+            height=dp(26)
         ))
         info = Label(
             text="Szabó Zoltán  •  IG: ZS420LLER",
@@ -1510,24 +1519,32 @@ class LibraryScreen(Screen):
                 App.get_running_app().open_screen("settings")
         )
 
+        build_label = Label(
+            text=f"v{APP_VERSION}  {APP_UI_REVISION}", color=ACCENT_2,
+            size_hint_x=None, width=dp(88), font_size="10sp", bold=True,
+            halign="center", valign="middle"
+        )
         brand_row.add_widget(brand)
+        brand_row.add_widget(build_label)
         brand_row.add_widget(settings_button)
         root.add_widget(brand_row)
         root.add_widget(MadeInHungaryBanner())
 
-        # v1.8.5: all library destinations on ONE horizontally swipeable line.
-        # Replaces four rows with one: more vertical room for the music library.
+        # v1.8.6 REV2: one compact, scrollable navigation strip.
+        # The arrows make it obvious that more categories are off screen.
+        nav_row = BoxLayout(size_hint_y=None, height=dp(47), spacing=dp(4))
         nav_scroll = ScrollView(
-            size_hint_y=None, height=dp(49),
+            size_hint=(1, None), height=dp(47),
             do_scroll_x=True, do_scroll_y=False,
-            scroll_type=["content"], bar_width=dp(3)
+            scroll_type=["content"], bar_width=dp(2)
         )
         nav_strip = BoxLayout(
             orientation="horizontal", size_hint_x=None,
             height=dp(44), size_hint_y=None,
-            spacing=dp(6), padding=[dp(2), dp(1), dp(10), dp(1)]
+            spacing=dp(5), padding=[dp(2), dp(1), dp(8), dp(1)]
         )
         nav_strip.bind(minimum_width=nav_strip.setter("width"))
+        self.nav_buttons = {}
         for text, target in (
             ("DALOK", "library"),
             ("ELŐADÓK", "artists"),
@@ -1542,12 +1559,13 @@ class LibraryScreen(Screen):
             ("STAT", "stats"),
             ("SMART", "smart"),
         ):
+            selected = target == "library"
             button = Button(
-                text=text,
-                size_hint_x=None,
-                width=dp(max(67, 23 + len(text) * 7.2)),
-                background_normal="", background_color=PANEL_2,
-                color=ACCENT_2 if target != "refresh" else TEXT_2,
+                text=text, size_hint_x=None,
+                width=dp(max(69, 24 + len(text) * 7.1)),
+                background_normal="", background_down="",
+                background_color=ACCENT if selected else PANEL_2,
+                color=(0, .07, .12, 1) if selected else ACCENT_2,
                 bold=True, font_size="10sp"
             )
             if target == "refresh":
@@ -1555,15 +1573,30 @@ class LibraryScreen(Screen):
             else:
                 button.bind(on_release=lambda _, t=target:
                     App.get_running_app().open_screen(t))
+            self.nav_buttons[target] = button
             nav_strip.add_widget(button)
         nav_scroll.add_widget(nav_strip)
-        root.add_widget(nav_scroll)
+        self.nav_scroll = nav_scroll
+        left_arrow = JustMusicIconButton(
+            icon_name="chevron_left", size_hint_x=None, width=dp(31),
+            icon_color=ACCENT_2, fill_color=PANEL_2
+        )
+        right_arrow = JustMusicIconButton(
+            icon_name="chevron_right", size_hint_x=None, width=dp(31),
+            icon_color=ACCENT_2, fill_color=PANEL_2
+        )
+        left_arrow.bind(on_release=lambda *_: self.scroll_navigation(-1))
+        right_arrow.bind(on_release=lambda *_: self.scroll_navigation(1))
+        nav_row.add_widget(left_arrow)
+        nav_row.add_widget(nav_scroll)
+        nav_row.add_widget(right_arrow)
+        root.add_widget(nav_row)
 
         self.search = TextInput(
             hint_text="Keresés a zenék között…",
             multiline=False,
             size_hint_y=None,
-            height=dp(46),
+            height=dp(42),
             background_normal="",
             background_active="",
             background_color=(.03, .11, .19, .96),
@@ -1578,11 +1611,28 @@ class LibraryScreen(Screen):
         self.search.bind(text=self._on_search_text)
         root.add_widget(self.search)
 
-        p = GlassPanel(size_hint_y=None, height=dp(54), padding=[dp(13), dp(7)])
-        self.status = Label(text="Zenetár betöltése…", color=TEXT_2, halign="left", valign="middle")
-        self.status.bind(size=lambda i, v: setattr(i, "text_size", (i.width, i.height)))
-        p.add_widget(self.status)
-        root.add_widget(p)
+        # A visible list header makes the REV2 layout unmistakable.
+        summary = GlassPanel(
+            size_hint_y=None, height=dp(44), padding=[dp(10), dp(5)],
+            spacing=dp(5)
+        )
+        self.status = Label(
+            text="ZENÉIM • Betöltés…", color=ACCENT_2,
+            halign="left", valign="middle", bold=True,
+            font_size="12sp"
+        )
+        self.status.bind(size=lambda inst, val:
+            setattr(inst, "text_size", (inst.width, inst.height)))
+        self.auto_next_button = JustMusicIconButton(
+            text="AUTO: BE", icon_name="auto_next", icon_align="left",
+            size_hint_x=None, width=dp(158), font_size="11sp", bold=True,
+            fill_color=PANEL_2, color=TEXT, icon_color=ACCENT_2
+        )
+        self.auto_next_button.bind(on_release=lambda *_:
+            App.get_running_app().toggle_auto_next())
+        summary.add_widget(self.status)
+        summary.add_widget(self.auto_next_button)
+        root.add_widget(summary)
 
         scroll = ScrollView(do_scroll_x=False, bar_width=dp(3), scroll_type=["content"])
         self.box = BoxLayout(orientation="vertical", spacing=dp(5),
@@ -1598,6 +1648,15 @@ class LibraryScreen(Screen):
     def on_pre_enter(self, *_):
         self.refresh_list()
 
+    def scroll_navigation(self, direction):
+        self.nav_scroll.scroll_x = max(0.0, min(1.0,
+            self.nav_scroll.scroll_x + float(direction) * .28))
+
+    def refresh_auto_next_button(self):
+        enabled = bool(getattr(App.get_running_app(), "auto_next_enabled", True))
+        self.auto_next_button.text = "AUTO: BE" if enabled else "AUTO: KI"
+        self.auto_next_button.set_icon_color(ACCENT_2 if enabled else TEXT_2)
+
     def _on_search_text(self, *_):
         if self._search_event is not None:
             try:self._search_event.cancel()
@@ -1611,14 +1670,15 @@ class LibraryScreen(Screen):
         self.box.clear_widgets()
         q = self.search.text.strip().lower()
         visible = [p for p in app.songs if (not q or q in clean_title(p).lower())]
+        self.refresh_auto_next_button()
         if app._scan_in_progress and not app.songs:
-            self.status.text = "Zenetár frissítése…"
+            self.status.text = "ZENÉIM • KERESÉS…"
             message = "Zenék keresése a telefonon…"
         elif app.songs:
-            self.status.text = f"{len(visible)} dal • {app.backend_name}"
+            self.status.text = f"ZENÉIM • {len(visible)} / {len(app.songs)}"
             message = "Nincs találat a keresésre." if q else ""
         else:
-            self.status.text = "Nem találtam zenét."
+            self.status.text = "ZENÉIM • 0 DAL"
             message = "A BEÁLLÍTÁSOK → ZENE MAPPÁK menüben adj hozzá zenemappát."
         if not visible and message:
             label = Label(text=message, color=TEXT_2, font_size="13sp",
@@ -3444,7 +3504,7 @@ class SleepScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.6"
+        self.title="JustMusic! Mobile v1.8.6 REV2"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3478,6 +3538,7 @@ class JustMusicApp(App):
         self.audio.on_completed = self.on_audio_completed
         self.backend_name="Android MediaPlayer" if self.audio.android else "Kivy fallback"
         self.shuffle_enabled=False; self.repeat_mode="off"
+        self.auto_next_enabled=True
         # PC-s Advanced Mixer állapotok — 1/1 ugyanazok az opciók.
         self.crossfade_enabled=False
         self.mix_fade_out_seconds=1.5
@@ -3561,6 +3622,7 @@ class JustMusicApp(App):
                     pass
 
             d=json.loads(p.read_text(encoding="utf-8")); self.shuffle_enabled=bool(d.get("shuffle",False)); self.repeat_mode=d.get("repeat","off")
+            self.auto_next_enabled=bool(d.get("auto_next", True))
             mix=d.get("mixer",{})
             self.crossfade_enabled=bool(mix.get("crossfade_enabled", d.get("mix", 0) not in (0, None)))
             legacy=float(d.get("mix",3.0) or 3.0)
@@ -3617,6 +3679,7 @@ class JustMusicApp(App):
                 },
                 "eq":self.eq_values,
                 "rg":self.replaygain_enabled,
+                "auto_next":self.auto_next_enabled,
                 "favorites":sorted(self.favorites),
                 "custom_folders":list(self.custom_folders),
                 "playlists":self.playlists,
@@ -3689,8 +3752,10 @@ class JustMusicApp(App):
             return
         self._scan_in_progress = True
         self._scan_pending = False
-        try:self.library.status.text = "Zenetár frissítése…"
-        except Exception:pass
+        try:
+            self.library.refresh_list()
+        except Exception:
+            pass
         roots = list(self.music_roots())
 
         def worker():
@@ -4251,6 +4316,10 @@ class JustMusicApp(App):
             meta = autoclass("android.media.MediaMetadata$Builder")()
             meta.putString(MediaMetadata.METADATA_KEY_TITLE,
                            str(info.get("title") or "JustMusic!"))
+            meta.putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE,
+                           str(info.get("title") or "JustMusic!"))
+            meta.putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,
+                           str(info.get("artist") or "Ismeretlen előadó"))
             meta.putString(MediaMetadata.METADATA_KEY_ARTIST,
                            str(info.get("artist") or "Ismeretlen előadó"))
             meta.putString(MediaMetadata.METADATA_KEY_ALBUM,
@@ -4308,7 +4377,7 @@ class JustMusicApp(App):
             )
 
             builder.setSmallIcon(android_R_drawable.ic_media_play)
-            builder.setContentTitle(str(title or "JustMusic!"))
+            builder.setContentTitle(str(info.get("title") or title or "JustMusic!"))
             builder.setContentText(str(info.get("artist") or "JustMusic!"))
             builder.setSubText(str(info.get("album") or ""))
             builder.setOngoing(bool(playing))
@@ -4682,12 +4751,21 @@ class JustMusicApp(App):
             if self.current_path:
                 self.show_android_notification(clean_title(self.current_path), False)
     def on_audio_completed(self):
-        """Advance automatically, respecting queue, shuffle and repeat modes."""
+        """Advance exactly once after natural completion, if AUTO is enabled."""
         if not self._playing_expected or self.mix_in_progress or not self.current_path:
             return
-        self._playing_expected = False  # prevent duplicate Java/tick callbacks
+        self._playing_expected = False  # guard against duplicate Java/tick callbacks
         self.audio.completed = False
-        self.next()
+        if self.auto_next_enabled:
+            self.next()
+        else:
+            self.library.player.set_playing(False)
+            self.show_android_notification(clean_title(self.current_path), False)
+
+    def toggle_auto_next(self):
+        self.auto_next_enabled = not self.auto_next_enabled
+        self.library.refresh_auto_next_button()
+        self.save_settings()
 
     def toggle_shuffle(self):self.shuffle_enabled=not self.shuffle_enabled;self.library.player.set_shuffle(self.shuffle_enabled);self.save_settings()
     def cycle_repeat(self):
@@ -5056,13 +5134,15 @@ class JustMusicApp(App):
                 self.audio.android
                 and self.crossfade_enabled
                 and self.mix_auto_transition_enabled
+                and self.auto_next_enabled
                 and trigger>0
                 and rem<=trigger
                 and not self.mix_in_progress
             ):
                 self.start_next_transition(auto=True)
             if not self.mix_in_progress and rem<=.20:
-                if self.mix_gapless_enabled and self.mix_auto_transition_enabled:
+                if (self.auto_next_enabled and self.mix_gapless_enabled
+                        and self.mix_auto_transition_enabled):
                     self.start_next_transition(auto=True)
                 else:
                     self.on_audio_completed()
