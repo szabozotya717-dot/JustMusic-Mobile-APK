@@ -5,8 +5,8 @@ package.domain = hu.zs420ller
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,json,lrc
 version = 1.8.6
-# v1.8.6 REV3: új Android buildszám
-android.numeric_version = 1080603
+# v1.8.6 REV5: új buildszám, bal oldali menü és Android beállítások
+android.numeric_version = 1080605
 requirements = python3,kivy,pyjnius,mutagen
 orientation = portrait
 fullscreen = 0

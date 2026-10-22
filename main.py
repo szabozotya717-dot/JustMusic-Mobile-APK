@@ -52,7 +52,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
 APP_VERSION = "1.8.6"
-APP_UI_REVISION = "REV3"  # Jobb oldali menü, Archive és helyi import
+APP_UI_REVISION = "REV5"  # MINDEN menu bal oldalt, zarkepernyo beallitas javitva
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -1596,34 +1596,30 @@ class LibraryScreen(Screen):
         root.add_widget(brand_row)
         root.add_widget(MadeInHungaryBanner())
 
-        # REV3: dalok BALRA, kategoriak JOBBRA, egy oszlopban.
-        # A lejátszó lent marad, a jobb oldali menü önállóan görgethető.
+        # REV5: az ÖSSZES navigáció / import / Archive BALRA, egymás alatt.
+        # A zenelista és a keresés JOBBRA, a lejátszó teljes szélességben lent.
+        # A bal oldali menü külön függőlegesen görgethető.
         content_row = BoxLayout(orientation="horizontal", spacing=dp(6))
         music_column = BoxLayout(orientation="vertical", spacing=dp(6))
 
-        quick_actions = BoxLayout(size_hint_y=None, height=dp(43), spacing=dp(5))
-        for label, command in (("+ HELYI ZENE", "import"), ("↓ ARCHIVE", "archive")):
-            b = Button(text=label, background_normal="", background_down="",
-                background_color=ACCENT if command == "import" else PANEL_2,
-                color=(.01, .08, .14, 1) if command == "import" else ACCENT_2,
-                bold=True, font_size="11sp")
-            b.bind(on_release=lambda _, cmd=command: (
-                App.get_running_app().pick_local_music() if cmd == "import"
-                else App.get_running_app().open_screen("archive")))
-            quick_actions.add_widget(b)
-        music_column.add_widget(quick_actions)
-
-        side_width = dp(108)
+        # Nincs külön jobb oldali gyorsgomb: az import és az Archive is BALRA kerül.
+        side_width = dp(132)
         side = GlassPanel(orientation="vertical", size_hint_x=None,
             width=side_width, padding=[dp(4), dp(7)], spacing=dp(5))
-        side.add_widget(Label(text="MENÜ", color=ACCENT_2, bold=True,
-            font_size="12sp", size_hint_y=None, height=dp(29)))
+        menu_header = Label(text="MENÜ  ◀ BAL", color=ACCENT_2, bold=True,
+            font_size="11sp", halign="left", valign="middle",
+            size_hint_y=None, height=dp(29))
+        menu_header.bind(size=lambda widget, _size:
+            setattr(widget, "text_size", (widget.width, widget.height)))
+        side.add_widget(menu_header)
         side_scroll = ScrollView(do_scroll_x=False, bar_width=dp(2))
         side_items = BoxLayout(orientation="vertical", size_hint_y=None,
             spacing=dp(5), padding=[dp(1), dp(2), dp(1), dp(8)])
         side_items.bind(minimum_height=side_items.setter("height"))
         self.nav_buttons = {}
         categories = (
+            ("+ HELYI ZENE", "import"),
+            ("↓ ARCHIVE", "archive"),
             ("DALOK", "library"),
             ("PLAYLISTEK", "playlists"),
             ("ALBUMOK", "albums"),
@@ -1637,15 +1633,15 @@ class LibraryScreen(Screen):
             ("STAT", "stats"),
             ("SMART", "smart"),
             ("FRISSÍTÉS", "refresh"),
-            ("ARCHIVE", "archive"),
-            ("HELYI +", "import"),
         )
         for label, target in categories:
-            b = Button(text=label, size_hint_y=None, height=dp(41),
+            b = Button(text="  " + label, size_hint_y=None, height=dp(44),
                 background_normal="", background_down="",
-                background_color=ACCENT if target == "library" else PANEL_2,
-                color=(.01, .08, .14, 1) if target == "library" else TEXT,
-                font_size="9sp", bold=True)
+                background_color=ACCENT if target in ("library", "import") else PANEL_2,
+                color=(.01, .08, .14, 1) if target in ("library", "import") else TEXT,
+                font_size="10sp", bold=True, halign="left", valign="middle")
+            b.bind(size=lambda button, _size:
+                setattr(button, "text_size", (max(dp(30),button.width-dp(8)), button.height)))
             if target == "refresh":
                 b.bind(on_release=lambda *_: App.get_running_app().scan())
             elif target == "import":
@@ -1707,8 +1703,10 @@ class LibraryScreen(Screen):
         self.box.bind(minimum_height=self.box.setter("height"))
         scroll.add_widget(self.box)
         music_column.add_widget(scroll)
-        content_row.add_widget(music_column)
+        # BAL oldalt valamennyi menüpont, egyetlen görgethető oszlopban.
+        # JOBB oldalt a kereső, a zenelista és az AUTO kapcsoló.
         content_row.add_widget(side)
+        content_row.add_widget(music_column)
         root.add_widget(content_row)
 
         self.player = PlayerBar()
@@ -3713,7 +3711,7 @@ class ArchiveScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.6 REV3"
+        self.title="JustMusic! Mobile v1.8.6 REV5"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3743,6 +3741,7 @@ class JustMusicApp(App):
         self._media_state_last_sync = 0.0
         self._playback_wake_lock = None
         self._notification_permission_attempted = False
+        self._user_notification_permission_requested = False
         self._local_file_request_code = 7617
         self._playing_expected = False
 
@@ -4108,23 +4107,62 @@ class JustMusicApp(App):
         except BaseException as error:print("NOTIFIKÁCIÓ ENGEDÉLYKÉRÉS HIBA:",error)
 
     def open_notification_access(self):
-        """Rendszerbeállítás, mert a zárképernyős médiakártya nem külön APK-engedély."""
+        """REV5: közvetlen értesítési oldal helyett a saját app adatlapját nyissa.
+
+        Az ACTION_APP_NOTIFICATION_SETTINGS egyes Android-gyártóknál az
+        'alkalmazás nem található' hibát mutatja. A hivatalosan támogatott
+        ACTION_APPLICATION_DETAILS_SETTINGS + package: URI útvonalat használjuk.
+        A média-zárképernyő megjelenéséhez nincs külön runtime engedély.
+        """
+        help_text = (
+            "A JustMusic! alkalmazásinformációs lapján nyisd meg az "
+            "Értesítések részt, engedélyezd a lejátszási értesítéseket "
+            "és a zárolt képernyőn való megjelenítést. "
+            "Az Akkumulátor résznél a háttérműködést is engedélyezd. "
+            "A zárképernyős médiakártya csak elindított zenénél jelenhet meg."
+        )
         if platform != "android":
-            self.show_safe_message("ZÁRKÉPERNYŐ", "Android rendszerbeállításokban ellenőrizhető.")
+            self.show_safe_message("ZÁRKÉPERNYŐ", help_text)
             return
-        self.request_notification_permission(auto=False)
         try:
             from jnius import autoclass
-            PythonActivity=autoclass("org.kivy.android.PythonActivity")
-            Intent=autoclass("android.content.Intent")
-            Settings=autoclass("android.provider.Settings")
-            activity=PythonActivity.mActivity
-            intent=Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-            intent.putExtra(Settings.EXTRA_APP_PACKAGE,str(activity.getPackageName()))
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            BuildVersion = autoclass("android.os.Build$VERSION")
+            Intent = autoclass("android.content.Intent")
+            Settings = autoclass("android.provider.Settings")
+            Uri = autoclass("android.net.Uri")
+            activity = PythonActivity.mActivity
+            if activity is None:
+                raise RuntimeError("Android activity még nem elérhető")
+            package_name = str(activity.getPackageName())
+
+            # Android 13+: az értesítési engedély hiánya esetén először a
+            # valódi rendszer-engedélykérő ablakot mutassuk, ne egy Settings
+            # átirányítás fedje le a párbeszédet.
+            notification_perm = "android.permission.POST_NOTIFICATIONS"
+            if (BuildVersion.SDK_INT >= 33 and
+                    activity.checkSelfPermission(notification_perm) != 0 and
+                    not self._user_notification_permission_requested):
+                self._user_notification_permission_requested = True
+                self.request_notification_permission(auto=False)
+                return
+            # Második koppintáskor a rendszer appadatlapjára lépünk akkor is,
+            # ha az első engedélykérést a felhasználó elutasította.
+
+            # Stabilabb gyártófüggetlen út: JustMusic! -> Alkalmazásinformációk.
+            intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.setData(Uri.parse("package:" + package_name))
             activity.startActivity(intent)
         except BaseException as error:
-            print("NOTIFICATION SETTINGS HIBA:",error)
-            self.show_safe_message("ZÁRKÉPERNYŐ", "Telefon → Beállítások → Alkalmazások → JustMusic! → Értesítések. Engedélyezd a zárképernyős megjelenítést is.")
+            print("JUSTMUSIC APP DETAILS HIBA:", error)
+            try:
+                # Egyes gyártók még az app-adatlapot sem tudják megnyitni.
+                # Ilyenkor legalább a telepített alkalmazások listája nyíljon meg.
+                activity.startActivity(Intent(Settings.ACTION_APPLICATION_SETTINGS))
+                return
+            except BaseException as fallback_error:
+                print("JUSTMUSIC APP LIST HIBA:", fallback_error)
+            self.show_safe_message("ZÁRKÉPERNYŐ / SÚGÓ", help_text)
 
     def update_playback_wake_lock(self, playing):
         """Képernyő kikapcsolásakor maradjon futó a lejátszó, amíg aktív."""
