@@ -9,6 +9,7 @@ import base64
 import urllib.parse
 import urllib.request
 import urllib.error
+import shutil
 from pathlib import Path
 
 from kivy.app import App
@@ -51,7 +52,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
 APP_VERSION = "1.8.6"
-APP_UI_REVISION = "REV2"  # Látható jelzés az új APK megkülönböztetésére.
+APP_UI_REVISION = "REV3"  # Jobb oldali menü, Archive és helyi import
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -1162,6 +1163,23 @@ class NativeAudio:
 
     def _new(self, path, generation):
         p = self.MediaPlayer()
+        try:
+            from jnius import autoclass
+            AudioAttributes = autoclass("android.media.AudioAttributes")
+            attributes = autoclass("android.media.AudioAttributes$Builder")()
+            attributes.setUsage(AudioAttributes.USAGE_MEDIA)
+            attributes.setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            p.setAudioAttributes(attributes.build())
+        except BaseException as error:
+            print("AUDIO ATTRIBUTES SKIP:", error)
+        if self.android:
+            try:
+                from jnius import autoclass
+                current_activity = autoclass("org.kivy.android.PythonActivity").mActivity
+                PowerManager = autoclass("android.os.PowerManager")
+                p.setWakeMode(current_activity, PowerManager.PARTIAL_WAKE_LOCK)
+            except BaseException as error:
+                print("MEDIAPLAYER WAKE MODE SKIP:", error)
         p.setDataSource(str(path))
         p.prepare()
         try:
@@ -1487,6 +1505,54 @@ def make_song_row(path, refresh_callback=None):
     return row
 
 
+def make_compact_song_row(path, refresh_callback=None):
+    """Keskeny mobilnézet: borító + cím + kedvenc + hárompontos műveletek."""
+    app = App.get_running_app()
+    row = BoxLayout(size_hint_y=None, height=dp(53), spacing=dp(3))
+    art = cover_for_track(path)
+    if art:
+        image = Image(source=art, size_hint_x=None, width=dp(35),
+                      allow_stretch=True, keep_ratio=True)
+    else:
+        image = JustMusicIcon(icon_name="music", size_hint_x=None, width=dp(35))
+    row.add_widget(image)
+    title = Button(text=clean_title(path), halign="left", valign="middle",
+        font_size="11sp", background_normal="", background_color=CARD,
+        color=TEXT, shorten=True, shorten_from="right")
+    title.bind(size=lambda inst, sz: setattr(inst, "text_size", (max(dp(15),sz[0]-dp(6)),sz[1])))
+    title.bind(on_release=lambda *_: app.play_path(path))
+    row.add_widget(title)
+    heart = JustMusicIconButton(icon_name="heart", size_hint_x=None,
+        width=dp(31), icon_color=(1,.35,.47,1) if app.is_favorite(path) else TEXT_2)
+    def favorite(*_):
+        app.toggle_favorite(path)
+        heart.set_icon_color((1,.35,.47,1) if app.is_favorite(path) else TEXT_2)
+    heart.bind(on_release=favorite)
+    row.add_widget(heart)
+    menu = Button(text="⋮", size_hint_x=None, width=dp(30), bold=True,
+        font_size="20sp", background_normal="", background_color=PANEL_2, color=ACCENT_2)
+    def options(*_):
+        body=BoxLayout(orientation="vertical", spacing=dp(7), padding=dp(10))
+        pop=Popup(title=clean_title(path)[:55], content=body, size_hint=(.9, None), height=dp(270))
+        for label, callback in (
+            ("LEJÁTSZÁS", lambda: app.play_path(path)),
+            ("KÖVETKEZŐNEK", lambda: app.add_play_next(path)),
+            ("SOR VÉGÉRE", lambda: app.add_to_queue(path)),
+            ("KEDVENC", lambda: favorite()),
+        ):
+            b=Button(text=label, background_normal="", background_color=PANEL_2, color=TEXT,
+                     size_hint_y=None, height=dp(45), font_size="12sp")
+            def pressed(_btn, action=callback):
+                pop.dismiss()
+                action()
+            b.bind(on_release=pressed)
+            body.add_widget(b)
+        pop.open()
+    menu.bind(on_release=options)
+    row.add_widget(menu)
+    return row
+
+
 class LibraryScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -1495,7 +1561,7 @@ class LibraryScreen(Screen):
 
         root = BoxLayout(
             orientation="vertical",
-            padding=[dp(14), dp(12), dp(14), dp(10)],
+            padding=[dp(7), dp(10), dp(7), dp(8)],
             spacing=dp(7)
         )
 
@@ -1520,8 +1586,8 @@ class LibraryScreen(Screen):
         )
 
         build_label = Label(
-            text=f"v{APP_VERSION}  {APP_UI_REVISION}", color=ACCENT_2,
-            size_hint_x=None, width=dp(88), font_size="10sp", bold=True,
+            text=f"v{APP_VERSION} {APP_UI_REVISION}", color=ACCENT_2,
+            size_hint_x=None, width=dp(91), font_size="10sp", bold=True,
             halign="center", valign="middle"
         )
         brand_row.add_widget(brand)
@@ -1530,67 +1596,68 @@ class LibraryScreen(Screen):
         root.add_widget(brand_row)
         root.add_widget(MadeInHungaryBanner())
 
-        # v1.8.6 REV2: one compact, scrollable navigation strip.
-        # The arrows make it obvious that more categories are off screen.
-        nav_row = BoxLayout(size_hint_y=None, height=dp(47), spacing=dp(4))
-        nav_scroll = ScrollView(
-            size_hint=(1, None), height=dp(47),
-            do_scroll_x=True, do_scroll_y=False,
-            scroll_type=["content"], bar_width=dp(2)
-        )
-        nav_strip = BoxLayout(
-            orientation="horizontal", size_hint_x=None,
-            height=dp(44), size_hint_y=None,
-            spacing=dp(5), padding=[dp(2), dp(1), dp(8), dp(1)]
-        )
-        nav_strip.bind(minimum_width=nav_strip.setter("width"))
+        # REV3: dalok BALRA, kategoriak JOBBRA, egy oszlopban.
+        # A lejátszó lent marad, a jobb oldali menü önállóan görgethető.
+        content_row = BoxLayout(orientation="horizontal", spacing=dp(6))
+        music_column = BoxLayout(orientation="vertical", spacing=dp(6))
+
+        quick_actions = BoxLayout(size_hint_y=None, height=dp(43), spacing=dp(5))
+        for label, command in (("+ HELYI ZENE", "import"), ("↓ ARCHIVE", "archive")):
+            b = Button(text=label, background_normal="", background_down="",
+                background_color=ACCENT if command == "import" else PANEL_2,
+                color=(.01, .08, .14, 1) if command == "import" else ACCENT_2,
+                bold=True, font_size="11sp")
+            b.bind(on_release=lambda _, cmd=command: (
+                App.get_running_app().pick_local_music() if cmd == "import"
+                else App.get_running_app().open_screen("archive")))
+            quick_actions.add_widget(b)
+        music_column.add_widget(quick_actions)
+
+        side_width = dp(108)
+        side = GlassPanel(orientation="vertical", size_hint_x=None,
+            width=side_width, padding=[dp(4), dp(7)], spacing=dp(5))
+        side.add_widget(Label(text="MENÜ", color=ACCENT_2, bold=True,
+            font_size="12sp", size_hint_y=None, height=dp(29)))
+        side_scroll = ScrollView(do_scroll_x=False, bar_width=dp(2))
+        side_items = BoxLayout(orientation="vertical", size_hint_y=None,
+            spacing=dp(5), padding=[dp(1), dp(2), dp(1), dp(8)])
+        side_items.bind(minimum_height=side_items.setter("height"))
         self.nav_buttons = {}
-        for text, target in (
+        categories = (
             ("DALOK", "library"),
-            ("ELŐADÓK", "artists"),
-            ("ALBUMOK", "albums"),
-            ("KEDVENCEK", "favorites"),
-            ("CONNECT", "connect"),
-            ("FRISSÍTÉS", "refresh"),
-            ("MAPPÁK", "folders"),
             ("PLAYLISTEK", "playlists"),
+            ("ALBUMOK", "albums"),
+            ("ELŐADÓK", "artists"),
+            ("KEDVENCEK", "favorites"),
+            ("MAPPÁK", "folders"),
             ("MOST SZÓL", "now_playing"),
+            ("ZÁRKÉPERNYŐ", "notification"),
+            ("CONNECT", "connect"),
             ("ELŐZMÉNY", "history"),
             ("STAT", "stats"),
             ("SMART", "smart"),
-        ):
-            selected = target == "library"
-            button = Button(
-                text=text, size_hint_x=None,
-                width=dp(max(69, 24 + len(text) * 7.1)),
+            ("FRISSÍTÉS", "refresh"),
+            ("ARCHIVE", "archive"),
+            ("HELYI +", "import"),
+        )
+        for label, target in categories:
+            b = Button(text=label, size_hint_y=None, height=dp(41),
                 background_normal="", background_down="",
-                background_color=ACCENT if selected else PANEL_2,
-                color=(0, .07, .12, 1) if selected else ACCENT_2,
-                bold=True, font_size="10sp"
-            )
+                background_color=ACCENT if target == "library" else PANEL_2,
+                color=(.01, .08, .14, 1) if target == "library" else TEXT,
+                font_size="9sp", bold=True)
             if target == "refresh":
-                button.bind(on_release=lambda *_: App.get_running_app().scan())
+                b.bind(on_release=lambda *_: App.get_running_app().scan())
+            elif target == "import":
+                b.bind(on_release=lambda *_: App.get_running_app().pick_local_music())
+            elif target == "notification":
+                b.bind(on_release=lambda *_: App.get_running_app().open_notification_access())
             else:
-                button.bind(on_release=lambda _, t=target:
-                    App.get_running_app().open_screen(t))
-            self.nav_buttons[target] = button
-            nav_strip.add_widget(button)
-        nav_scroll.add_widget(nav_strip)
-        self.nav_scroll = nav_scroll
-        left_arrow = JustMusicIconButton(
-            icon_name="chevron_left", size_hint_x=None, width=dp(31),
-            icon_color=ACCENT_2, fill_color=PANEL_2
-        )
-        right_arrow = JustMusicIconButton(
-            icon_name="chevron_right", size_hint_x=None, width=dp(31),
-            icon_color=ACCENT_2, fill_color=PANEL_2
-        )
-        left_arrow.bind(on_release=lambda *_: self.scroll_navigation(-1))
-        right_arrow.bind(on_release=lambda *_: self.scroll_navigation(1))
-        nav_row.add_widget(left_arrow)
-        nav_row.add_widget(nav_scroll)
-        nav_row.add_widget(right_arrow)
-        root.add_widget(nav_row)
+                b.bind(on_release=lambda _, t=target: App.get_running_app().open_screen(t))
+            self.nav_buttons[target] = b
+            side_items.add_widget(b)
+        side_scroll.add_widget(side_items)
+        side.add_widget(side_scroll)
 
         self.search = TextInput(
             hint_text="Keresés a zenék között…",
@@ -1609,9 +1676,9 @@ class LibraryScreen(Screen):
         self._render_generation = 0
         self._render_queue = []
         self.search.bind(text=self._on_search_text)
-        root.add_widget(self.search)
+        music_column.add_widget(self.search)
 
-        # A visible list header makes the REV2 layout unmistakable.
+        # A dalok száma és az AUTO állapot a keskeny bal hasábban is látható.
         summary = GlassPanel(
             size_hint_y=None, height=dp(44), padding=[dp(10), dp(5)],
             spacing=dp(5)
@@ -1623,23 +1690,26 @@ class LibraryScreen(Screen):
         )
         self.status.bind(size=lambda inst, val:
             setattr(inst, "text_size", (inst.width, inst.height)))
-        self.auto_next_button = JustMusicIconButton(
-            text="AUTO: BE", icon_name="auto_next", icon_align="left",
-            size_hint_x=None, width=dp(158), font_size="11sp", bold=True,
-            fill_color=PANEL_2, color=TEXT, icon_color=ACCENT_2
+        self.auto_next_button = Button(
+            text="AUTO: BE", size_hint_x=None, width=dp(84),
+            font_size="10sp", bold=True, background_normal="",
+            background_color=PANEL_2, color=ACCENT_2
         )
         self.auto_next_button.bind(on_release=lambda *_:
             App.get_running_app().toggle_auto_next())
         summary.add_widget(self.status)
         summary.add_widget(self.auto_next_button)
-        root.add_widget(summary)
+        music_column.add_widget(summary)
 
         scroll = ScrollView(do_scroll_x=False, bar_width=dp(3), scroll_type=["content"])
         self.box = BoxLayout(orientation="vertical", spacing=dp(5),
                              size_hint_y=None, padding=[0, dp(3), 0, dp(8)])
         self.box.bind(minimum_height=self.box.setter("height"))
         scroll.add_widget(self.box)
-        root.add_widget(scroll)
+        music_column.add_widget(scroll)
+        content_row.add_widget(music_column)
+        content_row.add_widget(side)
+        root.add_widget(content_row)
 
         self.player = PlayerBar()
         root.add_widget(self.player)
@@ -1648,14 +1718,10 @@ class LibraryScreen(Screen):
     def on_pre_enter(self, *_):
         self.refresh_list()
 
-    def scroll_navigation(self, direction):
-        self.nav_scroll.scroll_x = max(0.0, min(1.0,
-            self.nav_scroll.scroll_x + float(direction) * .28))
-
     def refresh_auto_next_button(self):
         enabled = bool(getattr(App.get_running_app(), "auto_next_enabled", True))
         self.auto_next_button.text = "AUTO: BE" if enabled else "AUTO: KI"
-        self.auto_next_button.set_icon_color(ACCENT_2 if enabled else TEXT_2)
+        self.auto_next_button.color = ACCENT_2 if enabled else TEXT_2
 
     def _on_search_text(self, *_):
         if self._search_event is not None:
@@ -1696,7 +1762,7 @@ class LibraryScreen(Screen):
         chunk = self._render_queue[:28]
         self._render_queue = self._render_queue[28:]
         for path in chunk:
-            self.box.add_widget(make_song_row(path, self.refresh_list))
+            self.box.add_widget(make_compact_song_row(path, self.refresh_list))
         if self._render_queue:
             Clock.schedule_once(lambda *_: self._render_chunk(generation), 0)
 
@@ -2776,6 +2842,9 @@ class SettingsScreen(BaseFeature):
             ("EQUALIZER", "eq", "eq"),
             ("REPLAYGAIN", "rg", "rg"),
             ("ZENE MAPPÁK", "folders", "folders"),
+            ("HELYI ZENE HOZZÁADÁSA", "import", "music"),
+            ("INTERNET ARCHIVE", "archive", "updates"),
+            ("ZÁRKÉPERNYŐ / ENGEDÉLY", "notification", "music"),
             ("PLAYLISTEK", "playlists", "playlists"),
             ("LEJÁTSZÁSI SOR", "queue", "queue"),
             ("CONNECT", "connect", "connect"),
@@ -2801,8 +2870,13 @@ class SettingsScreen(BaseFeature):
                 color=(0, .09, .16, 1) if selected else TEXT,
                 bold=True, font_size="13sp"
             )
-            button.bind(on_release=lambda _, t=target:
-                        App.get_running_app().open_screen(t))
+            if target == "import":
+                button.bind(on_release=lambda *_: App.get_running_app().pick_local_music())
+            elif target == "notification":
+                button.bind(on_release=lambda *_: App.get_running_app().open_notification_access())
+            else:
+                button.bind(on_release=lambda _, t=target:
+                            App.get_running_app().open_screen(t))
             settings_list.add_widget(button)
             self.buttons[target] = button
         settings_scroll.add_widget(settings_list)
@@ -3502,9 +3576,144 @@ class SleepScreen(BaseFeature):
         d=App.get_running_app().sleep_deadline; self.status.text="Kikapcsolva" if not d else f"Kb. {max(1,int((d-time.time())/60)+1)} perc"
 
 
+class ArchiveScreen(BaseFeature):
+    """Internet Archive: metaadatok, jogtisztán letölthető hangfájlok."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        root = self.make("ARCHIVE • ZENE LETÖLTÉS")
+        root.add_widget(Label(text="Internet Archive • CC / közkincs zenék",
+            color=TEXT_2, size_hint_y=None, height=dp(30), font_size="12sp"))
+        search_row=BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(5))
+        self.query=TextInput(hint_text="Előadó vagy zeneszám...", multiline=False,
+            background_normal="", background_active="", background_color=PANEL_2,
+            foreground_color=TEXT, hint_text_color=MUTED, size_hint_x=1)
+        self.query.bind(on_text_validate=lambda *_:self.search())
+        start=Button(text="KERESÉS", size_hint_x=None, width=dp(91),
+            background_normal="", background_color=ACCENT, color=BG, bold=True)
+        start.bind(on_release=lambda *_:self.search())
+        search_row.add_widget(self.query);search_row.add_widget(start)
+        root.add_widget(search_row)
+        self.status=Label(text="Írj be egy címet, majd nyomj a KERESÉS-re.",
+            color=ACCENT_2, size_hint_y=None, height=dp(42), font_size="11sp")
+        root.add_widget(self.status)
+        self.scroll=ScrollView(do_scroll_x=False)
+        self.results=BoxLayout(orientation="vertical", size_hint_y=None,
+            spacing=dp(5), padding=[dp(2),dp(2),dp(2),dp(10)])
+        self.results.bind(minimum_height=self.results.setter("height"))
+        self.scroll.add_widget(self.results)
+        root.add_widget(self.scroll)
+        self.generation=0
+
+    def _status(self, msg):
+        self.status.text=str(msg)
+
+    def search(self):
+        phrase=self.query.text.strip()
+        if len(phrase)<2:
+            self._status("Legalább két betűt írj be.");return
+        self.generation+=1; token=self.generation
+        self.results.clear_widgets()
+        self._status("Archive keresés folyamatban…")
+        def worker():
+            try:
+                # Kizárólag audio-elemek, a letöltés előtt licencellenőrzéssel.
+                query='(mediatype:audio OR mediatype:etree) AND (' + ' '.join(
+                    re.findall(r"[\w-]+",phrase,flags=re.UNICODE)[:9]) + ')'
+                params=[("q",query),("output","json"),("rows","22"),
+                    ("fl[]","identifier"),("fl[]","title"),("fl[]","creator"),
+                    ("fl[]","licenseurl")]
+                url="https://archive.org/advancedsearch.php?"+urllib.parse.urlencode(params)
+                req=urllib.request.Request(url,headers={"User-Agent":"JustMusic-Mobile/1.8.6 (+Archive search)"})
+                with urllib.request.urlopen(req,timeout=22) as res:
+                    docs=json.loads(res.read(1_500_000)).get("response",{}).get("docs",[])
+                Clock.schedule_once(lambda _dt:self._render_results(token,docs),0)
+            except Exception as error:
+                msg=f"Archive keresési hiba: {str(error)[:100]}"
+                Clock.schedule_once(lambda _dt:self._status(msg),0)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def _render_results(self, token, docs):
+        if token!=self.generation:return
+        self.results.clear_widgets()
+        self._status(f"{len(docs)} találat • válaszd a FÁJLOK gombot")
+        if not docs:self._status("Nincs találat. Próbálj másik keresést.")
+        for item in docs:
+            identifier=str(item.get("identifier") or "")
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",identifier):continue
+            title=str(item.get("title") or identifier)[:120]
+            creator=item.get("creator") or "Ismeretlen előadó"
+            if isinstance(creator,list):creator=", ".join(map(str,creator[:2]))
+            row=BoxLayout(size_hint_y=None,height=dp(68),spacing=dp(5))
+            label=Label(text=f"{title}\n{str(creator)[:60]}",color=TEXT,
+                font_size="11sp",halign="left",valign="middle",shorten=True)
+            label.bind(size=lambda inst,sz:setattr(inst,"text_size",(sz[0],sz[1])))
+            btn=Button(text="FÁJLOK",size_hint_x=None,width=dp(78),
+                background_normal="",background_color=PANEL_2,color=ACCENT_2,
+                font_size="10sp",bold=True)
+            btn.bind(on_release=lambda _,id=identifier,name=title: self.view_files(id,name))
+            row.add_widget(label);row.add_widget(btn);self.results.add_widget(row)
+
+    def view_files(self, identifier, title):
+        self._status("Fájlok és licenc ellenőrzése…")
+        def worker():
+            try:
+                url="https://archive.org/metadata/"+urllib.parse.quote(identifier)
+                req=urllib.request.Request(url,headers={"User-Agent":"JustMusic-Mobile/1.8.6"})
+                with urllib.request.urlopen(req,timeout=22) as res:
+                    data=json.loads(res.read(3_000_000))
+                meta=data.get("metadata",{}) or {}
+                license_value=str(meta.get("licenseurl") or "").lower()
+                rights=str(meta.get("rights") or "").lower()
+                allowed=("creativecommons.org/licenses/" in license_value
+                    or "creativecommons.org/publicdomain/" in license_value
+                    or "public domain" in rights or "közkincs" in rights)
+                files=[f for f in data.get("files",[]) if
+                       str(f.get("name") or "").lower().endswith(SUPPORTED_AUDIO)
+                       and str(f.get("source") or "") != "metadata"
+                       and (not f.get("size") or (str(f.get("size")).isdigit() and int(f["size"])<550_000_000))]
+                Clock.schedule_once(lambda _dt:self._render_files(title,identifier,files,allowed,license_value),0)
+            except Exception as error:
+                msg=f"Nem tölthetők be a fájlok: {str(error)[:100]}"
+                Clock.schedule_once(lambda _dt:self._status(msg),0)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def _render_files(self,title,identifier,files,allowed,license_value):
+        self.results.clear_widgets()
+        self._status(("Letölthető fájlok: " if allowed else "Licenc nem igazolt: csak megtekintés")
+                     +str(len(files)))
+        back=Button(text="← VISSZA A KERESÉSHEZ",size_hint_y=None,height=dp(43),
+                    background_normal="",background_color=PANEL_2,color=ACCENT_2)
+        back.bind(on_release=lambda *_:self.search())
+        self.results.add_widget(back)
+        if not files:
+            self.results.add_widget(Label(text="Nincs támogatott hangfájl ebben az elemben.",
+                size_hint_y=None,height=dp(75),color=TEXT_2))
+        if not allowed:
+            self.results.add_widget(Label(text="Nincs igazolható CC / közkincs megjelölés.\n"
+                "A fájlokat itt nem kínáljuk letöltésre.",size_hint_y=None,
+                height=dp(65),color=TEXT_2))
+        for info in files[:80]:
+            filename=str(info.get("name") or "")
+            row=BoxLayout(size_hint_y=None,height=dp(52),spacing=dp(4))
+            label=Label(text=Path(filename).name[:65],color=TEXT,font_size="11sp",shorten=True)
+            btn=Button(text="LE ↓" if allowed else "INFO",size_hint_x=None,width=dp(61),
+                background_normal="",background_color=ACCENT if allowed else PANEL_2,
+                color=BG if allowed else ACCENT_2,bold=True, font_size="10sp")
+            if allowed:
+                btn.bind(on_release=lambda _,id=identifier,n=filename:self.download_file(id,n))
+            else:
+                btn.bind(on_release=lambda _,id=identifier:App.get_running_app().open_url(
+                    "https://archive.org/details/"+urllib.parse.quote(id)))
+            row.add_widget(label);row.add_widget(btn);self.results.add_widget(row)
+
+    def download_file(self, identifier, filename):
+        App.get_running_app().download_archive_track(identifier,filename,self._status)
+
+
+
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.6 REV2"
+        self.title="JustMusic! Mobile v1.8.6 REV3"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3532,6 +3741,9 @@ class JustMusicApp(App):
         self._media_intent_bound=False
         self._media_session = None
         self._media_state_last_sync = 0.0
+        self._playback_wake_lock = None
+        self._notification_permission_attempted = False
+        self._local_file_request_code = 7617
         self._playing_expected = False
 
         self.audio=NativeAudio()
@@ -3568,6 +3780,7 @@ class JustMusicApp(App):
         self.history_screen=HistoryScreen(name="history")
         self.stats_screen=StatsScreen(name="stats")
         self.smart_screen=SmartScreen(name="smart")
+        self.archive_screen=ArchiveScreen(name="archive")
         # ULTRA SAFE: extra v1.7/v1.8 screens are lazy-loaded.
         self.settings_screen=None
         self.language_region_screen=None
@@ -3579,7 +3792,8 @@ class JustMusicApp(App):
             self.albums_screen, self.album_tracks_screen,
             self.favorites_screen, self.connect_screen,
             self.folders_screen, self.playlists_screen, self.playlist_tracks_screen,
-            self.now_playing_screen, self.history_screen, self.stats_screen, self.smart_screen,
+            self.now_playing_screen, self.history_screen, self.stats_screen,
+            self.smart_screen, self.archive_screen,
             MixScreen(name="mix"), EQScreen(name="eq"), RGScreen(name="rg"),
             QueueScreen(name="queue"), SleepScreen(name="sleep")
         ):
@@ -3699,6 +3913,239 @@ class JustMusicApp(App):
                 "manual_queue":self.manual_queue[:500]
             },ensure_ascii=False, indent=2),encoding="utf-8")
         except Exception: pass
+    def imported_music_dir(self):
+        return Path(self.user_data_dir) / "Helyi_Zenek"
+
+    def downloaded_music_dir(self):
+        return Path(self.user_data_dir) / "Archive_Letoltesek"
+
+    @staticmethod
+    def _safe_file_name(filename):
+        name = str(filename or "hangfelvetel.mp3").replace("\\", "/").split("/")[-1]
+        name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', "_", name).strip(" .")
+        return name[:160] or "hangfelvetel.mp3"
+
+    @staticmethod
+    def _unused_target(folder, filename):
+        folder.mkdir(parents=True, exist_ok=True)
+        filename = JustMusicApp._safe_file_name(filename)
+        base, suffix = os.path.splitext(filename)
+        candidate = folder / filename
+        n=2
+        while candidate.exists():
+            candidate=folder / f"{base[:125]} ({n}){suffix}"
+            n+=1
+        return candidate
+
+    def pick_local_music(self):
+        """ACTION_OPEN_DOCUMENT: rendszerfájl-választó, akár sok hangfájllal."""
+        if platform != "android":
+            try:
+                from kivy.uix.filechooser import FileChooserListView
+                content=BoxLayout(orientation="vertical",spacing=dp(6))
+                fc=FileChooserListView(path=str(Path.home()),multiselect=True,
+                                       filters=["*.mp3","*.wav","*.ogg","*.flac","*.m4a","*.aac"])
+                content.add_widget(fc)
+                btn=Button(text="KIJELÖLTEK IMPORTÁLÁSA",size_hint_y=None,height=dp(45))
+                content.add_widget(btn)
+                popup=Popup(title="Helyi zenék hozzáadása",content=content,size_hint=(.96,.85))
+                def selected(*_):
+                    success=0
+                    for file in fc.selection:
+                        if Path(file).suffix.lower() in SUPPORTED_AUDIO:
+                            target=self._unused_target(self.imported_music_dir(),Path(file).name)
+                            shutil.copyfile(file,target);success+=1
+                    popup.dismiss();self.scan()
+                    self.show_safe_message("HELYI ZENE",f"Importálva: {success} fájl")
+                btn.bind(on_release=selected);popup.open()
+            except Exception as error:self.show_safe_message("HELYI ZENE",str(error))
+            return
+        try:
+            from android import activity
+            from jnius import autoclass
+            Intent=autoclass("android.content.Intent")
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            activity.unbind(on_activity_result=self._on_local_file_result)
+            activity.bind(on_activity_result=self._on_local_file_result)
+            intent=Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("audio/*")
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            PythonActivity.mActivity.startActivityForResult(intent,self._local_file_request_code)
+        except Exception as error:
+            print("HELYI ZENE PICKER HIBA:",error)
+            self.show_safe_message("HELYI ZENE", "Nem sikerült megnyitni a fájlválasztót: "+str(error)[:140])
+
+    def _on_local_file_result(self, request_code, result_code, intent):
+        if request_code != self._local_file_request_code:return
+        try:
+            from android import activity
+            activity.unbind(on_activity_result=self._on_local_file_result)
+        except Exception:pass
+        if result_code != -1 or intent is None:return
+        try:
+            uri_list=[]
+            clip=intent.getClipData()
+            if clip is not None:
+                for i in range(min(100,int(clip.getItemCount()))):
+                    uri_list.append(str(clip.getItemAt(i).getUri().toString()))
+            elif intent.getData() is not None:
+                uri_list.append(str(intent.getData().toString()))
+            if not uri_list:return
+            self.show_safe_message("HELYI ZENE",f"Importálás elindult: {len(uri_list)} fájl.")
+            def worker():
+                count=0;errors=[]
+                for uri in uri_list:
+                    try:
+                        if self._import_android_uri(uri):count+=1
+                    except Exception as exc: errors.append(str(exc)[:75])
+                def finished(_dt):
+                    self.scan()
+                    text=f"Sikeresen hozzáadva: {count} zenefájl."
+                    if errors:text += "\nHibák: " + "; ".join(errors[:2])
+                    self.show_safe_message("HELYI ZENE",text)
+                Clock.schedule_once(finished,0)
+            threading.Thread(target=worker,daemon=True).start()
+        except Exception as error:
+            print("HELYI ZENE VÁLASZTÁS HIBA:",error)
+
+    def _import_android_uri(self, uri_text):
+        from jnius import autoclass
+        Uri=autoclass("android.net.Uri")
+        PythonActivity=autoclass("org.kivy.android.PythonActivity")
+        OpenableColumns=autoclass("android.provider.OpenableColumns")
+        resolver=PythonActivity.mActivity.getContentResolver()
+        uri=Uri.parse(uri_text)
+        name="hangfelvetel.mp3"
+        cursor=None
+        try:
+            cursor=resolver.query(uri,None,None,None,None)
+            if cursor is not None and cursor.moveToFirst():
+                idx=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if idx>=0:name=str(cursor.getString(idx))
+        finally:
+            if cursor is not None:cursor.close()
+        if not name.lower().endswith(SUPPORTED_AUDIO):
+            raise ValueError("Nem támogatott hangformátum: "+name[:45])
+        dest=self._unused_target(self.imported_music_dir(),name)
+        # Buffer másolás: az Android provider content:// URI-ját kell olvasni,
+        # nem lehet azt egyszerű fájlútvonalként használni.
+        input_stream=resolver.openInputStream(uri)
+        if input_stream is None: raise IOError("A fájl nem olvasható.")
+        try:
+            buf=bytearray(65536)
+            with dest.open("wb") as out:
+                total=0
+                while True:
+                    amount=int(input_stream.read(buf))
+                    if amount<0:break
+                    if amount==0:continue
+                    total+=amount
+                    if total>550_000_000:raise ValueError("Túl nagy fájl (>550 MB)")
+                    out.write(buf[:amount])
+            if dest.stat().st_size==0:raise ValueError("Üres fájl")
+        except Exception:
+            dest.unlink(missing_ok=True)
+            raise
+        finally:
+            input_stream.close()
+        return True
+
+    def download_archive_track(self, identifier, filename, status_callback):
+        """Letöltés csak a kiválasztott, ellenőrzött CC / közkincs Archive elemről."""
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}",str(identifier)):
+            return
+        if not str(filename).lower().endswith(SUPPORTED_AUDIO):return
+        # Ne fogadjunk el tetszőleges URL-t vagy külső domain-t.
+        url="https://archive.org/download/"+urllib.parse.quote(identifier)+"/"+urllib.parse.quote(filename,safe="/")
+        target=self._unused_target(self.downloaded_music_dir(),Path(filename).name)
+        def progress(message):
+            Clock.schedule_once(lambda _dt:status_callback(message),0)
+        progress("Letöltés indul: "+target.name[:48])
+        def worker():
+            try:
+                req=urllib.request.Request(url,headers={"User-Agent":"JustMusic-Mobile/1.8.6"})
+                total=0; last_report=0
+                with urllib.request.urlopen(req,timeout=40) as response, target.open("wb") as output:
+                    while True:
+                        chunk=response.read(128*1024)
+                        if not chunk:break
+                        total+=len(chunk)
+                        if total>550_000_000:raise ValueError("A fájl túl nagy (550 MB felett)")
+                        output.write(chunk)
+                        if total-last_report>=2_000_000:
+                            last_report=total
+                            progress(f"Letöltés: {total/1_048_576:.1f} MB")
+                if total<100:raise ValueError("Nem érkezett használható zenefájl.")
+                progress(f"KÉSZ! {target.name[:35]} • {total/1_048_576:.1f} MB")
+                Clock.schedule_once(lambda _dt:self.scan(),0)
+            except Exception as error:
+                target.unlink(missing_ok=True)
+                progress("Archive hiba: "+str(error)[:95])
+        threading.Thread(target=worker,daemon=True).start()
+
+    def request_notification_permission(self, auto=False):
+        if platform!="android":return
+        if auto and self._notification_permission_attempted:return
+        self._notification_permission_attempted=True
+        try:
+            from jnius import autoclass
+            Version=autoclass("android.os.Build$VERSION")
+            if Version.SDK_INT < 33:return
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            activity=PythonActivity.mActivity
+            perm="android.permission.POST_NOTIFICATIONS"
+            if activity.checkSelfPermission(perm)==0:return
+            from android.permissions import request_permissions
+            def permission_result(_permissions, grants):
+                if any(bool(granted) for granted in (grants or [])):
+                    Clock.schedule_once(lambda _dt: self.show_android_notification(
+                        clean_title(self.current_path), self.audio.is_playing()
+                    ) if self.current_path else None, 0)
+            self._notification_permission_callback = permission_result
+            request_permissions([perm], self._notification_permission_callback)
+        except BaseException as error:print("NOTIFIKÁCIÓ ENGEDÉLYKÉRÉS HIBA:",error)
+
+    def open_notification_access(self):
+        """Rendszerbeállítás, mert a zárképernyős médiakártya nem külön APK-engedély."""
+        if platform != "android":
+            self.show_safe_message("ZÁRKÉPERNYŐ", "Android rendszerbeállításokban ellenőrizhető.")
+            return
+        self.request_notification_permission(auto=False)
+        try:
+            from jnius import autoclass
+            PythonActivity=autoclass("org.kivy.android.PythonActivity")
+            Intent=autoclass("android.content.Intent")
+            Settings=autoclass("android.provider.Settings")
+            activity=PythonActivity.mActivity
+            intent=Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            intent.putExtra(Settings.EXTRA_APP_PACKAGE,str(activity.getPackageName()))
+            activity.startActivity(intent)
+        except BaseException as error:
+            print("NOTIFICATION SETTINGS HIBA:",error)
+            self.show_safe_message("ZÁRKÉPERNYŐ", "Telefon → Beállítások → Alkalmazások → JustMusic! → Értesítések. Engedélyezd a zárképernyős megjelenítést is.")
+
+    def update_playback_wake_lock(self, playing):
+        """Képernyő kikapcsolásakor maradjon futó a lejátszó, amíg aktív."""
+        if platform!="android":return
+        try:
+            if playing:
+                if self._playback_wake_lock is None:
+                    from jnius import autoclass
+                    PythonActivity=autoclass("org.kivy.android.PythonActivity")
+                    Context=autoclass("android.content.Context")
+                    PowerManager=autoclass("android.os.PowerManager")
+                    manager=PythonActivity.mActivity.getSystemService(Context.POWER_SERVICE)
+                    self._playback_wake_lock=manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
+                                                               "JustMusic:Playback")
+                    self._playback_wake_lock.setReferenceCounted(False)
+                if not self._playback_wake_lock.isHeld():self._playback_wake_lock.acquire()
+            elif self._playback_wake_lock is not None and self._playback_wake_lock.isHeld():
+                self._playback_wake_lock.release()
+        except BaseException as error:
+            print("WAKE LOCK HIBA:",error)
+
     def permissions(self):
         if platform!="android":return
         try:
@@ -3708,7 +4155,6 @@ class JustMusicApp(App):
                 "android.permission.READ_EXTERNAL_STORAGE",
                 "android.permission.BLUETOOTH_CONNECT",
                 "android.permission.BLUETOOTH_SCAN",
-                "android.permission.POST_NOTIFICATIONS",
             ])
         except Exception as e: print("Permission:",e)
     def default_music_roots(self):
@@ -3757,6 +4203,7 @@ class JustMusicApp(App):
         except Exception:
             pass
         roots = list(self.music_roots())
+        roots += [str(self.imported_music_dir()), str(self.downloaded_music_dir())]
 
         def worker():
             found = {}
@@ -4338,7 +4785,9 @@ class JustMusicApp(App):
     def show_android_notification(self, title, playing=True):
         if platform != "android":
             return
-
+        self.update_playback_wake_lock(bool(playing))
+        if playing:
+            self.request_notification_permission(auto=True)
         try:
             from jnius import autoclass
 
@@ -5168,7 +5617,10 @@ class JustMusicApp(App):
         return True
 
     def on_resume(self):
-        # Visszatéréskor automatikus könyvtár-frissítés.
+        # Visszatéréskor frissüljön a zárképernyős értesítés is.
+        if self.current_path:
+            Clock.schedule_once(lambda *_: self.show_android_notification(
+                clean_title(self.current_path), self.audio.is_playing()), .3)
         Clock.schedule_once(lambda *_: self.scan(), 0.8)
 
     def on_stop(self):
@@ -5181,6 +5633,7 @@ class JustMusicApp(App):
                 )
             except BaseException:
                 pass
+        self.update_playback_wake_lock(False)
         self.hide_android_notification()
         if self._media_session is not None:
             try:

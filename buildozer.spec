@@ -5,13 +5,13 @@ package.domain = hu.zs420ller
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,json,lrc
 version = 1.8.6
-# Ugyanaz a publikus verzió, de új Android buildszám a REV2 csomaghoz.
-android.numeric_version = 1080602
+# v1.8.6 REV3: új Android buildszám
+android.numeric_version = 1080603
 requirements = python3,kivy,pyjnius,mutagen
 orientation = portrait
 fullscreen = 0
 icon.filename = %(source.dir)s/icon.png
-android.permissions = POST_NOTIFICATIONS,INTERNET,READ_MEDIA_AUDIO,READ_EXTERNAL_STORAGE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN
+android.permissions = POST_NOTIFICATIONS,INTERNET,READ_MEDIA_AUDIO,READ_EXTERNAL_STORAGE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,WAKE_LOCK
 android.api = 36
 android.minapi = 24
 android.ndk = 28c
