@@ -52,7 +52,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
 APP_VERSION = "1.8.6"
-APP_UI_REVISION = "REV6"  # PC-stilusu bal menu, elvalaszto es media foreground service
+APP_UI_REVISION = "REV7"  # thinner icons, one-line sidebar labels, compact settings header, media control icons
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -896,7 +896,7 @@ class GlassPanel(BoxLayout):
 # Kivy draws the icons as lines, so Android font glyph availability does not matter.
 def draw_justmusic_icon(group, name, x, y, size, tint):
     scale = size / 24.0
-    stroke = max(dp(1.4), scale * 1.9)
+    stroke = max(dp(1.0), scale * 1.25)
 
     def path(points, closed=False):
         coords = []
@@ -927,6 +927,17 @@ def draw_justmusic_icon(group, name, x, y, size, tint):
         path([(3, 5), (3, 19), (14, 12), (3, 5)], True)
         path([(17, 5), (17, 19)])
         path([(21, 5), (21, 19)])
+    elif name == "play":
+        path([(7, 5), (7, 19), (19, 12), (7, 5)], True)
+    elif name == "pause":
+        path([(8, 5), (8, 19)])
+        path([(16, 5), (16, 19)])
+    elif name == "previous":
+        path([(18, 5), (8, 12), (18, 19)])
+        path([(8, 5), (8, 19)])
+    elif name == "next":
+        path([(6, 5), (16, 12), (6, 19)])
+        path([(16, 5), (16, 19)])
     elif name == "home":
         path([(3, 12), (12, 21), (21, 12)])
         path([(5, 12), (5, 3), (19, 3), (19, 12)])
@@ -1101,6 +1112,10 @@ class JustMusicIconButton(Button):
         self.icon_color = new_color
         self._refresh_icon()
 
+    def set_icon_name(self, new_name):
+        self.icon_name = new_name
+        self._refresh_icon()
+
     def _refresh_icon(self, *_):
         self._rounded_bg.pos = self.pos
         self._rounded_bg.size = self.size
@@ -1137,9 +1152,11 @@ class SidebarNavButton(Button):
         kwargs.setdefault("background_down", "")
         kwargs["background_color"] = (0, 0, 0, 0)
         kwargs.setdefault("bold", True)
-        kwargs.setdefault("font_size", "10sp")
+        kwargs.setdefault("font_size", "8.7sp")
         kwargs.setdefault("halign", "left")
         kwargs.setdefault("valign", "middle")
+        kwargs.setdefault("shorten", True)
+        kwargs.setdefault("shorten_from", "right")
         kwargs.setdefault("color", (0.02, 0.08, 0.12, 1) if selected else TEXT)
         super().__init__(**kwargs)
         with self.canvas.before:
@@ -1153,10 +1170,10 @@ class SidebarNavButton(Button):
     def _layout(self, *_):
         self._rect.pos = self.pos
         self._rect.size = self.size
-        self.text_size = (max(dp(28), self.width-dp(45)), self.height-dp(2))
+        self.text_size = (max(dp(28), self.width-dp(42)), self.height-dp(2))
         self._icon_instructions.clear()
         draw_justmusic_icon(self._icon_instructions, self.icon_name,
-            self.x + dp(7), self.center_y-dp(9), dp(18),
+            self.x + dp(8), self.center_y-dp(8), dp(16),
             (0.02, .08, .12, 1) if self.selected else ACCENT_2)
 
 
@@ -1422,13 +1439,26 @@ class PlayerBar(GlassPanel):
         self.total = Label(text="0:00", color=TEXT_2, size_hint_x=None, width=dp(42))
         seek.add_widget(self.elapsed); seek.add_widget(self.slider); seek.add_widget(self.total); self.add_widget(seek)
 
-        controls = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(5))
+        controls = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(5))
         self.buttons = {}
-        for name in ("SHUF", "PREV", "PLAY", "NEXT", "REP"):
-            btn = Button(text=name, background_normal="", background_color=ACCENT if name == "PLAY" else PANEL_2,
-                         color=(0, .07, .12, 1) if name == "PLAY" else TEXT, bold=True, font_size="11sp")
-            self.buttons[name] = btn
-            controls.add_widget(btn)
+
+        shuffle = Button(text="SHUF", background_normal="", background_color=PANEL_2,
+                         color=TEXT, bold=True, font_size="11sp")
+        previous = JustMusicIconButton(icon_name="previous", fill_color=PANEL_2, icon_color=TEXT)
+        play = JustMusicIconButton(icon_name="play", fill_color=ACCENT, icon_color=(0, .07, .12, 1))
+        next_btn = JustMusicIconButton(icon_name="next", fill_color=PANEL_2, icon_color=TEXT)
+        repeat = Button(text="REP", background_normal="", background_color=PANEL_2,
+                        color=TEXT, bold=True, font_size="11sp")
+
+        self.buttons["SHUF"] = shuffle
+        self.buttons["PREV"] = previous
+        self.buttons["PLAY"] = play
+        self.buttons["NEXT"] = next_btn
+        self.buttons["REP"] = repeat
+
+        for widget in (shuffle, previous, play, next_btn, repeat):
+            controls.add_widget(widget)
+
         self.buttons["SHUF"].bind(on_release=lambda *_: App.get_running_app().toggle_shuffle())
         self.buttons["PREV"].bind(on_release=lambda *_: App.get_running_app().previous())
         self.buttons["PLAY"].bind(on_release=lambda *_: App.get_running_app().toggle_play())
@@ -1445,7 +1475,12 @@ class PlayerBar(GlassPanel):
             features.add_widget(b)
         self.add_widget(features)
 
-    def set_playing(self, on): self.buttons["PLAY"].text = "PAUSE" if on else "PLAY"
+    def set_playing(self, on):
+        play_btn = self.buttons["PLAY"]
+        if hasattr(play_btn, "set_icon_name"):
+            play_btn.set_icon_name("pause" if on else "play")
+        else:
+            play_btn.text = "PAUSE" if on else "PLAY"
     def set_shuffle(self, on): self.buttons["SHUF"].color = ACCENT_2 if on else TEXT
     def set_repeat(self, mode):
         self.buttons["REP"].text = {"off":"REP", "all":"REP ALL", "one":"REP 1"}[mode]
@@ -1669,7 +1704,7 @@ class LibraryScreen(Screen):
         content_row = BoxLayout(orientation="horizontal", spacing=dp(6))
         music_column = BoxLayout(orientation="vertical", spacing=dp(6))
 
-        side = GlassPanel(orientation="vertical", size_hint_x=.46,
+        side = GlassPanel(orientation="vertical", size_hint_x=None, width=dp(182),
             padding=[dp(5), dp(7), dp(5), dp(6)], spacing=dp(5))
         menu_header = Label(text="JustMusic!", color=ACCENT_2, bold=True,
             font_size="14sp", halign="left", valign="middle",
@@ -1699,8 +1734,8 @@ class LibraryScreen(Screen):
             ("CONNECT", "connect", "connect"),
         )
         tools = (
-            ("HELYI ZENE HOZZÁADÁSA", "import", "add"),
-            ("ZENE LETÖLTÉSE", "archive", "download"),
+            ("HELYI ZENE +", "import", "add"),
+            ("LETÖLTÉS", "archive", "download"),
             ("ZÁRKÉPERNYŐ", "notification", "music"),
             ("ZENE MAPPÁK", "folders", "folders"),
             ("FRISSÍTÉS", "refresh", "updates"),
@@ -2918,8 +2953,10 @@ class SettingsScreen(BaseFeature):
 
         self.locale_info = Label(
             text="", color=ACCENT_2, size_hint_y=None,
-            height=dp(44), bold=True
+            height=dp(58), bold=True, font_size="10sp",
+            halign="left", valign="middle"
         )
+        self.locale_info.bind(size=lambda inst, sz: setattr(inst, "text_size", (max(dp(20), sz[0]-dp(8)), sz[1])))
         root.add_widget(self.locale_info)
 
         # Keep every original label. Icons are drawn BEFORE the texts.
@@ -2973,13 +3010,9 @@ class SettingsScreen(BaseFeature):
         app = App.get_running_app()
         self.title_label.text = f"[b]{ui_text(app, 'settings')}[/b]"
         prefix = "" if app.setup_complete else "ELSŐ BEÁLLÍTÁS • "
-        self.locale_info.text = (
-            prefix
-            + f"{ui_text(app, 'language')}: "
-            f"{SUPPORTED_LANGUAGES.get(app.language, app.language)}   •   "
-            f"{ui_text(app, 'region')}: "
-            f"{SUPPORTED_REGIONS.get(app.region, app.region)}"
-        )
+        first = f"{ui_text(app, 'language')}: {SUPPORTED_LANGUAGES.get(app.language, app.language)}"
+        second = f"{ui_text(app, 'region')}: {SUPPORTED_REGIONS.get(app.region, app.region)}"
+        self.locale_info.text = (prefix + first + "\n" + second) if prefix else (first + "\n" + second)
         if "language_region" in self.buttons:
             self.buttons["language_region"].text = ui_text(app, "language_region")
         if "updates" in self.buttons:
@@ -4825,7 +4858,11 @@ class JustMusicApp(App):
             self._music_service_started = True
             self._music_service_launch_time = time.time()
             print("JUSTMUSIC FOREGROUND MEDIA SERVICE ELINDULT")
-            return True
+            # Az első indításnál még nem biztos, hogy a háttérszolgáltatás
+            # létrehozta a saját médiaértesítését. Ilyenkor a hívó fél NE
+            # nyelje el azonnal a régi notificationt, különben a felhasználó
+            # nem lát semmit a zárolt képernyőn.
+            return False
         except BaseException as error:
             print("JUSTMUSIC SERVICE BRIDGE HIBA:", error)
             return False

@@ -5,8 +5,8 @@ package.domain = hu.zs420ller
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,json,lrc
 version = 1.8.6
-# v1.8.6 REV6: új buildszám, bal oldali menü és Android beállítások
-android.numeric_version = 1080606
+# v1.8.6 REV7: kompakt feliratok, vékony ikonok, javított vezérlők és lockscreen fallback
+android.numeric_version = 1080607
 requirements = python3,kivy,pyjnius,mutagen
 # Foreground MediaSession lives in another Android process.
 services = music:music_service.py:foreground:foregroundServiceType=mediaPlayback
