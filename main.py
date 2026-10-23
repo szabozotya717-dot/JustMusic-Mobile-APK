@@ -52,7 +52,7 @@ SUPPORTED_AUDIO = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
 SETTINGS_NAME = ".justmusic_mobile_settings.json"
 
 APP_VERSION = "1.8.6"
-APP_UI_REVISION = "REV5"  # MINDEN menu bal oldalt, zarkepernyo beallitas javitva
+APP_UI_REVISION = "REV6"  # PC-stilusu bal menu, elvalaszto es media foreground service
 GITHUB_REPO = "szabozotya717-dot/JustMusic-Mobile-APK"
 GITHUB_LATEST_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -927,6 +927,41 @@ def draw_justmusic_icon(group, name, x, y, size, tint):
         path([(3, 5), (3, 19), (14, 12), (3, 5)], True)
         path([(17, 5), (17, 19)])
         path([(21, 5), (21, 19)])
+    elif name == "home":
+        path([(3, 12), (12, 21), (21, 12)])
+        path([(5, 12), (5, 3), (19, 3), (19, 12)])
+        path([(10, 3), (10, 10), (14, 10), (14, 3)])
+    elif name == "artists":
+        ring(9, 17, 3.5)
+        path([(2, 5), (2, 9), (6, 13), (12, 13), (16, 9), (16, 5)])
+        ring(18, 16, 2.4)
+        path([(17, 12), (22, 10), (22, 5)])
+    elif name == "albums":
+        path([(3, 3), (3, 21), (21, 21), (21, 3), (3, 3)], True)
+        ring(12, 12, 6)
+        ring(12, 12, 1.5)
+    elif name == "stats":
+        path([(2, 4), (2, 19)])
+        path([(2, 4), (22, 4)])
+        path([(4, 7), (9, 11), (13, 9), (18, 17), (22, 20)])
+    elif name == "smart":
+        ring(12, 12, 6)
+        for degree in range(0, 360, 90):
+            a = degree * pi / 180
+            path([(12 + 8*cos(a), 12 + 8*sin(a)), (12 + 10*cos(a), 12 + 10*sin(a))])
+    elif name == "sleep":
+        path([(17, 20), (13, 17), (11, 13), (12, 9), (16, 5), (20, 5),
+              (16, 2), (8, 4), (4, 9), (4, 15), (8, 20), (17, 20)])
+    elif name == "search":
+        ring(10, 14, 7)
+        path([(15, 8), (22, 2)])
+    elif name == "download":
+        path([(12, 21), (12, 6), (6, 12)])
+        path([(12, 6), (18, 12)])
+        path([(4, 4), (4, 2), (20, 2), (20, 4)])
+    elif name == "add":
+        path([(12, 3), (12, 21)])
+        path([(3, 12), (21, 12)])
     elif name == "heart":
         path([(12, 3), (19, 9), (21, 12), (22, 15), (20, 18),
               (17, 20), (14, 20), (12, 18), (10, 20), (7, 20),
@@ -1091,6 +1126,38 @@ def icon_text_row(icon, label, icon_color=ACCENT_2):
     row.add_widget(glyph)
     row.add_widget(label)
     return row
+
+
+class SidebarNavButton(Button):
+    """Compact PC-style left navigation for narrow Android phone screens."""
+    def __init__(self, icon_name="music", selected=False, **kwargs):
+        self.icon_name = icon_name
+        self.selected = selected
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs["background_color"] = (0, 0, 0, 0)
+        kwargs.setdefault("bold", True)
+        kwargs.setdefault("font_size", "10sp")
+        kwargs.setdefault("halign", "left")
+        kwargs.setdefault("valign", "middle")
+        kwargs.setdefault("color", (0.02, 0.08, 0.12, 1) if selected else TEXT)
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            self._fill = Color(*(ACCENT if selected else (.04, .15, .24, .84)))
+            self._rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(5)])
+        self._icon_instructions = InstructionGroup()
+        self.canvas.after.add(self._icon_instructions)
+        self.bind(size=self._layout, pos=self._layout)
+        self._layout()
+
+    def _layout(self, *_):
+        self._rect.pos = self.pos
+        self._rect.size = self.size
+        self.text_size = (max(dp(28), self.width-dp(45)), self.height-dp(2))
+        self._icon_instructions.clear()
+        draw_justmusic_icon(self._icon_instructions, self.icon_name,
+            self.x + dp(7), self.center_y-dp(9), dp(18),
+            (0.02, .08, .12, 1) if self.selected else ACCENT_2)
 
 
 class DarkOverlay(Widget):
@@ -1596,62 +1663,84 @@ class LibraryScreen(Screen):
         root.add_widget(brand_row)
         root.add_widget(MadeInHungaryBanner())
 
-        # REV5: az ÖSSZES navigáció / import / Archive BALRA, egymás alatt.
-        # A zenelista és a keresés JOBBRA, a lejátszó teljes szélességben lent.
-        # A bal oldali menü külön függőlegesen görgethető.
+        # REV6: a PC-s JustMusic! oldalsavjat koveti.
+        # BAL: ikon + felirat egymas alatt. Egy elvalaszto a navigacio es
+        # a helyi zene/letoltes eszkozei kozott. JOBB: dalok es kereses.
         content_row = BoxLayout(orientation="horizontal", spacing=dp(6))
         music_column = BoxLayout(orientation="vertical", spacing=dp(6))
 
-        # Nincs külön jobb oldali gyorsgomb: az import és az Archive is BALRA kerül.
-        side_width = dp(132)
-        side = GlassPanel(orientation="vertical", size_hint_x=None,
-            width=side_width, padding=[dp(4), dp(7)], spacing=dp(5))
-        menu_header = Label(text="MENÜ  ◀ BAL", color=ACCENT_2, bold=True,
-            font_size="11sp", halign="left", valign="middle",
-            size_hint_y=None, height=dp(29))
+        side = GlassPanel(orientation="vertical", size_hint_x=.46,
+            padding=[dp(5), dp(7), dp(5), dp(6)], spacing=dp(5))
+        menu_header = Label(text="JustMusic!", color=ACCENT_2, bold=True,
+            font_size="14sp", halign="left", valign="middle",
+            size_hint_y=None, height=dp(36))
         menu_header.bind(size=lambda widget, _size:
             setattr(widget, "text_size", (widget.width, widget.height)))
         side.add_widget(menu_header)
+
         side_scroll = ScrollView(do_scroll_x=False, bar_width=dp(2))
         side_items = BoxLayout(orientation="vertical", size_hint_y=None,
-            spacing=dp(5), padding=[dp(1), dp(2), dp(1), dp(8)])
+            spacing=dp(3), padding=[dp(1), dp(2), dp(1), dp(8)])
         side_items.bind(minimum_height=side_items.setter("height"))
         self.nav_buttons = {}
-        categories = (
-            ("+ HELYI ZENE", "import"),
-            ("↓ ARCHIVE", "archive"),
-            ("DALOK", "library"),
-            ("PLAYLISTEK", "playlists"),
-            ("ALBUMOK", "albums"),
-            ("ELŐADÓK", "artists"),
-            ("KEDVENCEK", "favorites"),
-            ("MAPPÁK", "folders"),
-            ("MOST SZÓL", "now_playing"),
-            ("ZÁRKÉPERNYŐ", "notification"),
-            ("CONNECT", "connect"),
-            ("ELŐZMÉNY", "history"),
-            ("STAT", "stats"),
-            ("SMART", "smart"),
-            ("FRISSÍTÉS", "refresh"),
+
+        navigation = (
+            ("KEZDŐLAP", "library", "home"),
+            ("ELŐADÓK", "artists", "artists"),
+            ("ALBUMOK", "albums", "albums"),
+            ("KEDVENCEK", "favorites", "heart"),
+            ("ÖSSZES DAL", "library_all", "music"),
+            ("PLAYLISTEK", "playlists", "playlists"),
+            ("SMART LISTÁK", "smart", "smart"),
+            ("STATISZTIKÁK", "stats", "stats"),
+            ("LEJÁTSZÁSI SOR", "queue", "queue"),
+            ("SLEEP TIMER", "sleep", "sleep"),
+            ("MOST SZÓL", "now_playing", "music"),
+            ("CONNECT", "connect", "connect"),
         )
-        for label, target in categories:
-            b = Button(text="  " + label, size_hint_y=None, height=dp(44),
-                background_normal="", background_down="",
-                background_color=ACCENT if target in ("library", "import") else PANEL_2,
-                color=(.01, .08, .14, 1) if target in ("library", "import") else TEXT,
-                font_size="10sp", bold=True, halign="left", valign="middle")
-            b.bind(size=lambda button, _size:
-                setattr(button, "text_size", (max(dp(30),button.width-dp(8)), button.height)))
+        tools = (
+            ("HELYI ZENE HOZZÁADÁSA", "import", "add"),
+            ("ZENE LETÖLTÉSE", "archive", "download"),
+            ("ZÁRKÉPERNYŐ", "notification", "music"),
+            ("ZENE MAPPÁK", "folders", "folders"),
+            ("FRISSÍTÉS", "refresh", "updates"),
+        )
+
+        def add_menu_item(label, target, glyph):
+            selected = target == "library"
+            button = SidebarNavButton(text=label, icon_name=glyph, selected=selected,
+                size_hint_y=None, height=dp(46) if len(label) < 19 else dp(55))
             if target == "refresh":
-                b.bind(on_release=lambda *_: App.get_running_app().scan())
+                button.bind(on_release=lambda *_: App.get_running_app().scan())
             elif target == "import":
-                b.bind(on_release=lambda *_: App.get_running_app().pick_local_music())
+                button.bind(on_release=lambda *_: App.get_running_app().pick_local_music())
             elif target == "notification":
-                b.bind(on_release=lambda *_: App.get_running_app().open_notification_access())
+                button.bind(on_release=lambda *_: App.get_running_app().open_notification_access())
+            elif target == "library_all":
+                button.bind(on_release=lambda *_: (
+                    setattr(self.search, "text", ""),
+                    App.get_running_app().open_screen("library")))
             else:
-                b.bind(on_release=lambda _, t=target: App.get_running_app().open_screen(t))
-            self.nav_buttons[target] = b
-            side_items.add_widget(b)
+                button.bind(on_release=lambda _, t=target:
+                    App.get_running_app().open_screen(t))
+            self.nav_buttons[target] = button
+            side_items.add_widget(button)
+
+        for label, target, glyph in navigation:
+            add_menu_item(label, target, glyph)
+        # A PC-s kepen kert VALODI elvalaszto a ket menucsoport kozott.
+        rule = Widget(size_hint_y=None, height=dp(17))
+        with rule.canvas:
+            Color(ACCENT_2[0], ACCENT_2[1], ACCENT_2[2], .65)
+            rule._separator_line = Line(points=[0, 0, 0, 0], width=1.0)
+        def sync_rule(w, *_):
+            w._separator_line.points = [w.x + dp(9), w.center_y,
+                                        w.right - dp(9), w.center_y]
+        rule.bind(pos=sync_rule, size=sync_rule)
+        side_items.add_widget(rule)
+        for label, target, glyph in tools:
+            add_menu_item(label, target, glyph)
+
         side_scroll.add_widget(side_items)
         side.add_widget(side_scroll)
 
@@ -3711,7 +3800,7 @@ class ArchiveScreen(BaseFeature):
 
 class JustMusicApp(App):
     def build(self):
-        self.title="JustMusic! Mobile v1.8.6 REV5"
+        self.title="JustMusic! Mobile v1.8.6 REV6"
         Window.clearcolor=BG
         self.songs=[]; self.current_index=-1; self.current_path=None; self.lyrics=[]; self.lyric_index=-1; self.favorites=set(); self.lyrics_fetching=set(); self.lyrics_source=""
         self.custom_folders=[]
@@ -3738,6 +3827,10 @@ class JustMusicApp(App):
         self.latest_download_url=""
         self._media_intent_bound=False
         self._media_session = None
+        self._music_service_started = False
+        self._music_service_seq = 0
+        self._music_service_launch_time = 0.0
+        self._music_service_sync_tick = 0.0
         self._media_state_last_sync = 0.0
         self._playback_wake_lock = None
         self._notification_permission_attempted = False
@@ -4678,6 +4771,65 @@ class JustMusicApp(App):
     def open_latest_update(self):
         self.open_url(self.latest_download_url or self.latest_release_url)
 
+    def _music_service_state_path(self):
+        return Path(self.user_data_dir) / "justmusic_media_state.json"
+
+    def _publish_music_service_state(self, playing=None, shutdown=False):
+        """Cross-process state for the Android mediaPlayback foreground service.
+
+        The Kivy UI retains its existing MediaPlayer, mixer and auto-next logic;
+        the service owns the Android media notification/session. No dummy
+        lockscreen permission dialog or browser handoff is needed.
+        """
+        if platform != "android":
+            return False
+        try:
+            path = self._music_service_state_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._music_service_seq += 1
+            info = track_metadata(self.current_path) if self.current_path else {}
+            data = {
+                "seq": self._music_service_seq,
+                "shutdown": bool(shutdown),
+                "playing": bool(self.audio.is_playing() if playing is None else playing),
+                "title": str(info.get("title") or "JustMusic!"),
+                "artist": str(info.get("artist") or "Ismeretlen előadó"),
+                "album": str(info.get("album") or ""),
+                "cover": str(cover_for_track(self.current_path) or "") if self.current_path else "",
+                "position_ms": int(max(0., self.audio.position()) * 1000) if self.current_path else 0,
+                "duration_ms": int(max(0., self.audio.duration()) * 1000) if self.current_path else 0,
+            }
+            # Atomic replace prevents half-read JSON in the other Android process.
+            temp = path.with_suffix(".tmp")
+            temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            os.replace(str(temp), str(path))
+            if shutdown:
+                return True
+            if self._music_service_started:
+                # Never suppress the old notification forever if the service
+                # crashes or was stopped by a vendor's battery policy.
+                heartbeat = Path(str(path) + ".heartbeat")
+                if heartbeat.exists():
+                    fresh = time.time() - heartbeat.stat().st_mtime < 14.0
+                else:
+                    fresh = time.time() - self._music_service_launch_time < 10.0
+                if fresh:
+                    return True
+                self._music_service_started = False
+                print("JUSTMUSIC SERVICE NEM VALASZOL, VISSZAALLAS A REGI ERTESITESRE")
+                return False
+            from jnius import autoclass
+            service_cls = autoclass("hu.zs420ller.justmusic.ServiceMusic")
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            service_cls.start(activity, str(path))
+            self._music_service_started = True
+            self._music_service_launch_time = time.time()
+            print("JUSTMUSIC FOREGROUND MEDIA SERVICE ELINDULT")
+            return True
+        except BaseException as error:
+            print("JUSTMUSIC SERVICE BRIDGE HIBA:", error)
+            return False
+
     def setup_android_media_controls(self):
         """
         Media intent listener is attached ONLY after the user starts playback.
@@ -4826,6 +4978,10 @@ class JustMusicApp(App):
         self.update_playback_wake_lock(bool(playing))
         if playing:
             self.request_notification_permission(auto=True)
+        # Android 14+ mediaPlayback foreground service: durable media session.
+        # If a vendor/toolchain rejects service startup, keep old notification.
+        if self._publish_music_service_state(playing=playing):
+            return
         try:
             from jnius import autoclass
 
@@ -5611,6 +5767,9 @@ class JustMusicApp(App):
                 and length > 0 and pos >= max(0, length - 0.6)):
             self.on_audio_completed()
             return
+        if self._music_service_started and now - self._music_service_sync_tick >= 2.0:
+            self._music_service_sync_tick = now
+            self._publish_music_service_state(playing=self._playing_expected)
         if self._media_session is not None and now - self._media_state_last_sync >= 5.0:
             self._media_state_last_sync = now
             self.update_android_media_state(self._playing_expected, pos)
@@ -5671,6 +5830,8 @@ class JustMusicApp(App):
                 )
             except BaseException:
                 pass
+        if self._music_service_started:
+            self._publish_music_service_state(playing=False, shutdown=True)
         self.update_playback_wake_lock(False)
         self.hide_android_notification()
         if self._media_session is not None:

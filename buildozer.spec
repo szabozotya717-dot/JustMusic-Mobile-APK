@@ -5,13 +5,15 @@ package.domain = hu.zs420ller
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,json,lrc
 version = 1.8.6
-# v1.8.6 REV5: új buildszám, bal oldali menü és Android beállítások
-android.numeric_version = 1080605
+# v1.8.6 REV6: új buildszám, bal oldali menü és Android beállítások
+android.numeric_version = 1080606
 requirements = python3,kivy,pyjnius,mutagen
+# Foreground MediaSession lives in another Android process.
+services = music:music_service.py:foreground:foregroundServiceType=mediaPlayback
 orientation = portrait
 fullscreen = 0
 icon.filename = %(source.dir)s/icon.png
-android.permissions = POST_NOTIFICATIONS,INTERNET,READ_MEDIA_AUDIO,READ_EXTERNAL_STORAGE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,WAKE_LOCK
+android.permissions = POST_NOTIFICATIONS,INTERNET,READ_MEDIA_AUDIO,READ_EXTERNAL_STORAGE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,WAKE_LOCK,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MEDIA_PLAYBACK
 android.api = 36
 android.minapi = 24
 android.ndk = 28c
